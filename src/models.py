@@ -22,30 +22,27 @@ ADDRESS_INNSBRUCK = Address(
 class OnboardingUser:
     """Represents a user to be onboarded, built from LOGA data.
 
-    LOGA data array indices:
-        0  = PNR (personnel number)
-        1  = Kürzel (abbreviation)
-        2  = Title prefix (e.g. Mag., Dr.)
-        3  = First name
-        4  = Last name
-        5  = Title suffix (e.g. LL.M.)
-        6  = Begin date
-        7  = End date
-        8  = Room
-        9  = Birth date
-        10 = Gender (M / W)
-        11 = Mobile
-        12 = Email
-        13 = Phone
-        14 = Kostenstelle
-        15 = Stundensatz
-        16 = Berufsträger
-        17 = Team
-        18 = UmfBesetz (FTE)
-        19 = Position / Job title
+    LOGA CSV column indices (semicolon-delimited):
+        0  = Kürzel (abbreviation)
+        1  = Titel (title prefix, e.g. Mag., Dr.)
+        2  = Vorname (first name)
+        3  = Nachname (last name)
+        4  = Titel nach dem Namen (title suffix, e.g. LL.M.)
+        5  = Vertragsbeginn (contract start / begin date)
+        6  = Vertragsende (contract end)
+        7  = Zimmer (room)
+        8  = Geburtsdatum (birth date)
+        9  = Handy (mobile)
+        10 = E-Mail (email)
+        11 = Telefon (phone)
+        12 = Kostenstelle (cost center)
+        13 = Stundensatz (hourly rate)
+        14 = Berufsträger (professional carrier flag)
+        15 = Team (team)
+        16 = FTE (full-time equivalent)
+        17 = Stellenbezeichnung (job title / position)
     """
 
-    pnr: str
     abbreviation: str
     title_pre: str
     first_name: str
@@ -55,7 +52,6 @@ class OnboardingUser:
     end_date: str
     room: str
     birth_date: str
-    gender: str  # "M" or "W"
     mobile: str
     email: str
     phone: str
@@ -76,44 +72,30 @@ class OnboardingUser:
             return ""
 
         return cls(
-            pnr=safe_get(0),
-            abbreviation=safe_get(1),
-            title_pre=safe_get(2),
-            first_name=safe_get(3),
-            last_name=safe_get(4),
-            title_post=safe_get(5),
-            begin_date=safe_get(6),
-            end_date=safe_get(7),
-            room=safe_get(8),
-            birth_date=safe_get(9),
-            gender=safe_get(10),
-            mobile=safe_get(11),
-            email=safe_get(12),
-            phone=safe_get(13),
-            kostenstelle=safe_get(14),
-            stundensatz=safe_get(15),
-            berufstraeger=safe_get(16),
-            team=safe_get(17),
-            umf_besetz=safe_get(18),
-            position=safe_get(19),
+            abbreviation=safe_get(0),
+            title_pre=safe_get(1),
+            first_name=safe_get(2),
+            last_name=safe_get(3),
+            title_post=safe_get(4),
+            begin_date=safe_get(5),
+            end_date=safe_get(6),
+            room=safe_get(7),
+            birth_date=safe_get(8),
+            mobile=safe_get(9),
+            email=safe_get(10),
+            phone=safe_get(11),
+            kostenstelle=safe_get(12),
+            stundensatz=safe_get(13),
+            berufstraeger=safe_get(14),
+            team=safe_get(15),
+            umf_besetz=safe_get(16),
+            position=safe_get(17),
         )
-
-    @property
-    def gender_display(self) -> str:
-        return "Männlich" if self.gender == "M" else "Weiblich"
-
-    @property
-    def address(self) -> Address:
-        return ADDRESS_INNSBRUCK if self.room.startswith("I") else ADDRESS_VIENNA
 
     @property
     def full_display_name(self) -> str:
         parts = [self.title_pre, self.first_name, self.last_name, self.title_post]
         return " ".join(p for p in parts if p)
-
-    @property
-    def is_reinigungskraft(self) -> bool:
-        return self.position == "Mitarbeiter*in Reinigung"
 
     @property
     def phone_extension(self) -> str:
@@ -125,34 +107,31 @@ class OnboardingUser:
 class OffboardingUser:
     """Represents a user to be offboarded, built from LOGA data.
 
-    Uses the same data structure as OnboardingUser, but focuses on
-    exit_date (= last work date) for offboarding operations.
+    Uses the same data structure as OnboardingUser, but adds exit_date
+    (Letzter Arbeitstag) for offboarding operations.
 
-    LOGA data array indices:
-        0  = PNR (personnel number)
-        1  = Kürzel (abbreviation)
-        2  = Title prefix (e.g. Mag., Dr.)
-        3  = First name
-        4  = Last name
-        5  = Title suffix (e.g. LL.M.)
-        6  = Begin date
-        7  = End date (contract end)
-        8  = Room
-        9  = Birth date
-        10 = Gender (M / W)
-        11 = Mobile
-        12 = Email
-        13 = Phone
-        14 = Kostenstelle
-        15 = Stundensatz
-        16 = Berufsträger
-        17 = Team
-        18 = UmfBesetz (FTE)
-        19 = Position / Job title
-        20 = Exit date (Letzter Arbeitstag) — the key field for offboarding
+    LOGA CSV column indices (semicolon-delimited):
+        0  = Kürzel (abbreviation)
+        1  = Titel (title prefix, e.g. Mag., Dr.)
+        2  = Vorname (first name)
+        3  = Nachname (last name)
+        4  = Titel nach dem Namen (title suffix, e.g. LL.M.)
+        5  = Vertragsbeginn (contract start / begin date)
+        6  = Vertragsende (contract end)
+        7  = Zimmer (room)
+        8  = Geburtsdatum (birth date)
+        9  = Handy (mobile)
+        10 = E-Mail (email)
+        11 = Telefon (phone)
+        12 = Kostenstelle (cost center)
+        13 = Stundensatz (hourly rate)
+        14 = Berufsträger (professional carrier flag)
+        15 = Team (team)
+        16 = FTE (full-time equivalent)
+        17 = Stellenbezeichnung (job title / position)
+        18 = Letzter Arbeitstag (exit date / last work day)
     """
 
-    pnr: str
     abbreviation: str
     title_pre: str
     first_name: str
@@ -163,7 +142,6 @@ class OffboardingUser:
     exit_date: str  # Last work date (Letzter Arbeitstag) — used for offboarding
     room: str
     birth_date: str
-    gender: str
     mobile: str
     email: str
     phone: str
@@ -171,7 +149,7 @@ class OffboardingUser:
     stundensatz: str
     berufstraeger: str
     team: str
-    umf_besetz: str
+    umf_besetz: str  # FTE
     position: str
 
     @classmethod
@@ -184,27 +162,25 @@ class OffboardingUser:
             return ""
 
         return cls(
-            pnr=safe_get(0),
-            abbreviation=safe_get(1),
-            title_pre=safe_get(2),
-            first_name=safe_get(3),
-            last_name=safe_get(4),
-            title_post=safe_get(5),
-            begin_date=safe_get(6),
-            end_date=safe_get(7),
-            exit_date=safe_get(20),  # Last work date
-            room=safe_get(8),
-            birth_date=safe_get(9),
-            gender=safe_get(10),
-            mobile=safe_get(11),
-            email=safe_get(12),
-            phone=safe_get(13),
-            kostenstelle=safe_get(14),
-            stundensatz=safe_get(15),
-            berufstraeger=safe_get(16),
-            team=safe_get(17),
-            umf_besetz=safe_get(18),
-            position=safe_get(19),
+            abbreviation=safe_get(0),
+            title_pre=safe_get(1),
+            first_name=safe_get(2),
+            last_name=safe_get(3),
+            title_post=safe_get(4),
+            begin_date=safe_get(5),
+            end_date=safe_get(6),
+            exit_date=safe_get(18),  # Last work date (Letzter Arbeitstag)
+            room=safe_get(7),
+            birth_date=safe_get(8),
+            mobile=safe_get(9),
+            email=safe_get(10),
+            phone=safe_get(11),
+            kostenstelle=safe_get(12),
+            stundensatz=safe_get(13),
+            berufstraeger=safe_get(14),
+            team=safe_get(15),
+            umf_besetz=safe_get(16),
+            position=safe_get(17),
         )
 
     @property

@@ -124,6 +124,8 @@ def fetch_exiting_users() -> list[OffboardingUser]:
 def _parse_csv_response(csv_text: str, model_class) -> list:
     """Parse CSV response from LOGA API.
     
+    Handles CSV where some rows may span multiple lines (line breaks within unquoted fields).
+    
     Args:
         csv_text: The CSV content as a string
         model_class: OnboardingUser or OffboardingUser class to instantiate
@@ -131,22 +133,54 @@ def _parse_csv_response(csv_text: str, model_class) -> list:
     Returns:
         List of model instances parsed from CSV rows
     """
-    csv_reader = csv.reader(io.StringIO(csv_text), delimiter=";")
-    
-    # Skip header row
-    header = next(csv_reader, None)
-    if not header:
-        logger.warning("CSV response has no header")
+    lines = csv_text.strip().split('\n')
+    if not lines:
+        logger.warning("CSV response is empty")
         return []
     
-    logger.debug(f"CSV header: {header}")
+    # Parse header row
+    header = lines[0].split(';')
+    expected_cols = len(header)
+    logger.debug(f"CSV has {expected_cols} columns: {header}")
     
+    # Parse data rows, handling multi-line rows
     rows = []
-    for row in csv_reader:
-        if row and any(row):  # Skip empty rows
-            rows.append(row)
+    current_row = []
     
-    logger.info("LOGA returned %d user rows from CSV", len(rows))
+    for line_idx, line in enumerate(lines[1:], start=2):
+        parts = line.split(';')
+        
+        # If this line has enough fields to be a complete/new row, save the current row and start new
+        if len(parts) >= expected_cols - 3:  # Allow flexibility for empty trailing fields
+            if current_row:
+                # Save previous row
+                rows.append(current_row)
+            current_row = parts
+        else:
+            # This line continues the previous row
+            if current_row:
+                current_row.extend(parts)
+            else:
+                # Shouldn't happen, but handle gracefully
+                current_row = parts
     
-    users = [model_class.from_loga_row(row) for row in rows]
+    # Don't forget the last row
+    if current_row:
+        rows.append(current_row)
+    
+    # Normalize rows to have exactly the right number of columns
+    normalized_rows = []
+    for row in rows:
+        # Trim to expected length
+        if len(row) > expected_cols:
+            row = row[:expected_cols]
+        # Pad with empty strings if too short
+        while len(row) < expected_cols:
+            row.append('')
+        normalized_rows.append(row)
+    
+    logger.info("Parsed %d rows from CSV (expected %d columns each)", len(normalized_rows), expected_cols)
+    
+    # Create model instances
+    users = [model_class.from_loga_row(row) for row in normalized_rows]
     return users
