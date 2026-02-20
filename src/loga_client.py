@@ -142,7 +142,7 @@ def _parse_csv_response(csv_text: str, model_class) -> list:
     # Parse header row
     header = lines[0].split(';')
     expected_cols = len(header)
-    logger.debug(f"CSV has {expected_cols} columns: {header}")
+    logger.debug(f"CSV has {expected_cols} columns")
     
     # Parse data rows, handling multi-line rows
     rows = []
@@ -155,8 +155,9 @@ def _parse_csv_response(csv_text: str, model_class) -> list:
         is_new_record = parts and parts[0].strip() != ""
         
         if is_new_record and current_row:
-            # We have a current row and this is a new record, so save it
-            rows.append(current_row)
+            # We have a current row and this is a new record
+            # Save the current row (trim to expected columns if it's larger)
+            rows.append(current_row[:expected_cols])
             current_row = parts
         elif is_new_record:
             # New record with no current row
@@ -164,28 +165,33 @@ def _parse_csv_response(csv_text: str, model_class) -> list:
         else:
             # Continuation of previous row
             if current_row:
+                # Handle LOGA exports that add duplicate empty fields between continuations
+                # If this continuation starts with an empty field and we already have fields,
+                # skip the first empty field to avoid duplication
+                if parts and not parts[0].strip() and len(current_row) > 0:
+                    parts = parts[1:]
+                
                 current_row.extend(parts)
+                
+                # If we've reached or exceeded the expected column count, this row is complete
+                if len(current_row) >= expected_cols:
+                    rows.append(current_row[:expected_cols])
+                    current_row = []
             else:
                 # Shouldn't happen but handle gracefully
                 current_row = parts
     
     # Don't forget the last row
     if current_row:
-        rows.append(current_row)
+        rows.append(current_row[:expected_cols])
     
-    # Normalize rows to have exactly the right number of columns
-    normalized_rows = []
+    # Pad rows that are too short
     for row in rows:
-        # Trim to expected length
-        if len(row) > expected_cols:
-            row = row[:expected_cols]
-        # Pad with empty strings if too short
         while len(row) < expected_cols:
             row.append('')
-        normalized_rows.append(row)
     
-    logger.info("Parsed %d rows from CSV (expected %d columns each)", len(normalized_rows), expected_cols)
+    logger.info("Parsed %d rows from CSV", len(rows))
     
     # Create model instances
-    users = [model_class.from_loga_row(row) for row in normalized_rows]
+    users = [model_class.from_loga_row(row) for row in rows]
     return users

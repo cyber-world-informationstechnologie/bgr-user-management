@@ -64,7 +64,10 @@ class OnboardingUser:
 
     @classmethod
     def from_loga_row(cls, row: list[str]) -> "OnboardingUser":
-        """Create an OnboardingUser from a LOGA data row (array of strings)."""
+        """Create an OnboardingUser from a LOGA data row (array of strings).
+        
+        Handles rows with 18-19 fields (tolerates trailing empty fields).
+        """
 
         def safe_get(index: int) -> str:
             if index < len(row):
