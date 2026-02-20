@@ -233,35 +233,36 @@ def run_offboarding(resend: bool = False) -> None:
 
 
 def _send_notification_on_new_users(users: list[OffboardingUser], resend: bool = False) -> None:
-    """Phase 1: Send notification email when new users appear in P&I report.
+    """Phase 1: Send notification email to offboarding team when new users appear in P&I report.
     
-    Sends ONE email to the configured recipient with all new users.
+    Sends ONE email to the OFFBOARDING TEAM with all newly detected users.
+    (Does NOT notify the users themselves - only the team.)
     
     Args:
         users: List of all users from LOGA API
-        resend: If True, resend even if already notified
+        resend: If True, resend even if already notified to team
     """
-    # Filter out users who have already been notified (unless resend=True)
+    # Filter out users who have already been included in a team notification (unless resend=True)
     if not resend:
         new_users = [u for u in users if not _has_notification_been_sent(u.email)]
-        already_notified = [u for u in users if _has_notification_been_sent(u.email)]
+        already_notified_to_team = [u for u in users if _has_notification_been_sent(u.email)]
         
-        if already_notified:
+        if already_notified_to_team:
             logger.info(
-                "Skipping %d users who have already been notified: %s",
-                len(already_notified),
-                ", ".join(u.email for u in already_notified),
+                "Skipping %d users already included in team notification: %s",
+                len(already_notified_to_team),
+                ", ".join(u.email for u in already_notified_to_team),
             )
     else:
         new_users = users
-        logger.info("RESEND: Notifying all %d users", len(users))
+        logger.info("RESEND: Notifying offboarding team about all %d users", len(users))
     
     if not new_users:
-        logger.info("Phase 1: No new users to notify")
+        logger.info("Phase 1: No new users to report to offboarding team")
         return
 
-    # Build a single email with all new users
-    logger.info("Phase 1: Sending notification email for %d new users", len(new_users))
+    # Build a single email with all new users for the offboarding team
+    logger.info("Phase 1: Sending notification email to offboarding team for %d new users", len(new_users))
     
     try:
         email_rows: list[OffboardingEmailRow] = []
@@ -288,14 +289,14 @@ def _send_notification_on_new_users(users: list[OffboardingUser], resend: bool =
             bcc_recipients=bcc or None,
             from_address=settings.offboarding_notification_email_from,
         )
-        logger.info("Notification email sent to %s for %d users", settings.offboarding_notification_email_to, len(new_users))
+        logger.info("Notification email sent to offboarding team (%s) for %d users", settings.offboarding_notification_email_to, len(new_users))
         
-        # Mark all users as notified
+        # Mark all users as included in a team notification
         for user in new_users:
             _mark_notification_sent(user.email)
-        logger.info("Marked %d users as notified", len(new_users))
+        logger.info("Marked %d users as included in team notification", len(new_users))
     except Exception:
-        logger.exception("Failed to send notification email")
+        logger.exception("Failed to send notification email to offboarding team")
 
 
 def _execute_offboarding_operations(users: list[OffboardingUser], resend: bool = False) -> None:
