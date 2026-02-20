@@ -125,6 +125,7 @@ def _parse_csv_response(csv_text: str, model_class) -> list:
     """Parse CSV response from LOGA API.
     
     Handles CSV where some rows may span multiple lines (line breaks within unquoted fields).
+    A new record starts when we encounter a non-empty Kürzel (abbreviation) field.
     
     Args:
         csv_text: The CSV content as a string
@@ -150,18 +151,22 @@ def _parse_csv_response(csv_text: str, model_class) -> list:
     for line_idx, line in enumerate(lines[1:], start=2):
         parts = line.split(';')
         
-        # If this line has enough fields to be a complete/new row, save the current row and start new
-        if len(parts) >= expected_cols - 3:  # Allow flexibility for empty trailing fields
-            if current_row:
-                # Save previous row
-                rows.append(current_row)
+        # Check if this line starts a new record (non-empty Kürzel/abbreviation at field 0)
+        is_new_record = parts and parts[0].strip() != ""
+        
+        if is_new_record and current_row:
+            # We have a current row and this is a new record, so save it
+            rows.append(current_row)
+            current_row = parts
+        elif is_new_record:
+            # New record with no current row
             current_row = parts
         else:
-            # This line continues the previous row
+            # Continuation of previous row
             if current_row:
                 current_row.extend(parts)
             else:
-                # Shouldn't happen, but handle gracefully
+                # Shouldn't happen but handle gracefully
                 current_row = parts
     
     # Don't forget the last row
