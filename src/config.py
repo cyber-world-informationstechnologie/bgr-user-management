@@ -8,25 +8,41 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # LOGA API
+    # ========== LOGA HR System ==========
     loga_api_url: str = "https://BGR.pi-asp.de/loga3/scout/api/v1/executeScoutReportJobAndGetFile"
-    loga_job_file_content: str = ""  # For onboarding (new users)
-    loga_offboarding_job_file_content: str = ""  # For offboarding (exiting users)
+    loga_onboarding_job_file_content: str = ""  # Onboarding report (new users)
+    loga_offboarding_job_file_content: str = ""  # Offboarding report (exiting users)
 
-    # SMTP (whitelisted connector, no auth)
+    # ========== SMTP ==========
     smtp_host: str = "bindergroesswang-at.mail.protection.outlook.com"
     smtp_port: int = 25
 
-    # Email
-    notification_email_to: str = "markus.hinkel@cwi.at"
-    notification_email_bcc: str = ""
-    notification_email_from: str = "onboarding@bgr.at"
-    error_notification_email: str = "markus.hinkel@cwi.at"
-    offboarding_email_from: str = "offboarding@bgr.at"
+    # ========== Onboarding Email Notifications ==========
+    onboarding_notification_email_to: str = "markus.hinkel@cwi.at"
+    onboarding_notification_email_bcc: str = ""
+    onboarding_notification_email_from: str = "onboarding@bgr.at"
 
-    # Offboarding
+    # ========== Offboarding Email Notifications ==========
+    offboarding_notification_email_to: str = "markus.hinkel@cwi.at"
+    offboarding_notification_email_bcc: str = ""
+    offboarding_notification_email_from: str = "offboarding@bgr.at"
+
+    # ========== Error Notifications ==========
+    error_notification_email: str = "markus.hinkel@cwi.at"
+
+    # ========== Offboarding Configuration ==========
     offboarding_absence_notice: str = (
         "Diese Person ist nicht mehr bei unserem Unternehmen tätig. "
         "Bitte kontaktieren Sie uns bei Fragen."
     )
-    disabled_users_ou: str = "OU=Disabled Users,DC=bgr,DC=at"
+    offboarding_disabled_users_ou: str = "OU=Disabled Users,DC=bgr,DC=at"
+    # ========== Active Directory & Profile Folder ==========
+    profile_base_path: str = r"\\bgr\dfs\Profile"
+    default_password: str = "Onboarding13IT!"
+    remote_routing_domain: str = "bindergroesswang-at.mail.onmicrosoft.com"
+
+    # ========== Dry Run Mode ==========
+    dry_run: bool = True
+
+
+settings = Settings()

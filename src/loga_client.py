@@ -22,7 +22,7 @@ def fetch_new_users() -> list[OnboardingUser]:
         settings.loga_api_url,
         headers={"Content-Type": "application/json"},
         json={
-            "jobFileContent": settings.loga_job_file_content,
+            "jobFileContent": settings.loga_onboarding_job_file_content,
             "locale": "de_DE",
         },
         timeout=120,

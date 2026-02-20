@@ -135,13 +135,13 @@ def run_onboarding() -> None:
     # Step 3: Send summary email
     if email_rows:
         html_body = build_onboarding_email(email_rows)
-        bcc = [addr.strip() for addr in settings.notification_email_bcc.split(",") if addr.strip()]
+        bcc = [addr.strip() for addr in settings.onboarding_notification_email_bcc.split(",") if addr.strip()]
         try:
             send_email(
                 subject="Onboarding",
                 html_body=html_body,
-                to_recipients=[settings.notification_email_to],
-                from_address=settings.notification_email_from,
+                to_recipients=[settings.onboarding_notification_email_to],
+                from_address=settings.onboarding_notification_email_from,
                 bcc_recipients=bcc or None,
             )
             logger.info("Summary email sent for %d user(s)", len(email_rows))

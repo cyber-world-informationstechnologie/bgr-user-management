@@ -75,7 +75,7 @@ def _process_user(user: OffboardingUser) -> OffboardingEmailRow | None:
 
         # Active Directory cleanup
         disable_user_account(user.abbreviation)
-        move_user_to_ou(user.abbreviation, settings.disabled_users_ou)
+        move_user_to_ou(user.abbreviation, settings.offboarding_disabled_users_ou)
         remove_user_from_all_groups(user.abbreviation)
 
         logger.info("Offboarding completed for %s", user.email)
@@ -150,14 +150,15 @@ def run_offboarding() -> None:
     if email_rows:
         try:
             html_body = build_offboarding_email(email_rows)
+            bcc = [addr.strip() for addr in settings.offboarding_notification_email_bcc.split(",") if addr.strip()]
             send_email(
                 subject=f"Offboarding Summary — {len(email_rows)} Benutzer verarbeitet",
                 html_body=html_body,
-                to_recipients=[settings.notification_email_to],
-                bcc_recipients=settings.notification_email_bcc.split(",") if settings.notification_email_bcc else [],
-                from_address=settings.offboarding_email_from,
+                to_recipients=[settings.offboarding_notification_email_to],
+                bcc_recipients=bcc or None,
+                from_address=settings.offboarding_notification_email_from,
             )
-            logger.info("Offboarding summary email sent to %s", settings.notification_email_to)
+            logger.info("Offboarding summary email sent to %s", settings.offboarding_notification_email_to)
         except Exception:
             logger.exception("Failed to send summary email")
 

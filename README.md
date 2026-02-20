@@ -171,31 +171,44 @@ Copy-Item .env.example .env
 Dann die Datei `.env` bearbeiten und die fehlenden Werte ausfüllen:
 
 ```dotenv
-# LOGA API — den base64-kodierten Job-File-Content eintragen
-LOGA_JOB_FILE_CONTENT=<Wert von Markus erfragen>
+# LOGA HR System — den base64-kodierten Job-File-Content eintragen
+LOGA_ONBOARDING_JOB_FILE_CONTENT=<Wert von Markus erfragen>
+LOGA_OFFBOARDING_JOB_FILE_CONTENT=<Wert von Markus erfragen>
 
 # Restliche Werte sind bereits korrekt vorausgefüllt.
 # Zum Testen DRY_RUN=true lassen (Standard).
 ```
 
-| Variable | Beschreibung |
-|---|---|
-| `LOGA_API_URL` | URL der LOGA Scout Report API (vorausgefüllt) |
-| `LOGA_JOB_FILE_CONTENT` | Base64-kodierter Schlüssel für den LOGA Onboarding-Report — **vertraulich, nicht ins Git committen!** |
-| `LOGA_OFFBOARDING_JOB_FILE_CONTENT` | Base64-kodierter Schlüssel für den LOGA Offboarding-Report (ausscheidende Mitarbeiter) — **vertraulich, nicht ins Git committen!** |
-| `SMTP_HOST` | SMTP-Server für E-Mail-Versand (vorausgefüllt) |
-| `SMTP_PORT` | SMTP-Port, Standard 25 (vorausgefüllt) |
-| `NOTIFICATION_EMAIL_TO` | Empfänger der Zusammenfassungs-E-Mail (Onboarding) |
-| `NOTIFICATION_EMAIL_BCC` | BCC-Empfänger (kommagetrennt, optional, z.B. `a@bgr.at,b@bgr.at`) |
-| `NOTIFICATION_EMAIL_FROM` | Absender-Adresse (Onboarding) |
-| `OFFBOARDING_EMAIL_FROM` | Absender-Adresse (Offboarding) |
-| `ERROR_NOTIFICATION_EMAIL` | Empfänger bei Fehlern |
-| `OFFBOARDING_ABSENCE_NOTICE` | Text der Abwesenheitsnotiz bei Austritten (Auto-Reply) |
-| `DISABLED_USERS_OU` | AD Organisationseinheit für deaktivierte Benutzer (z.B. `OU=Disabled Users,DC=bgr,DC=at`) |
-| `PROFILE_BASE_PATH` | UNC-Pfad zum Profilordner-Share |
-| `DEFAULT_PASSWORD` | Standardpasswort für neue Postfächer |
-| `REMOTE_ROUTING_DOMAIN` | Remote-Routing-Domain für Exchange Online (z.B. `bindergroesswang-at.mail.onmicrosoft.com`) |
-| `DRY_RUN` | `true` = nur loggen, nichts ändern; `false` = produktiv ausführen |
+**Umgebungsvariablen — nach Prozesstyp organisiert:**
+
+| Variable | Beschreibung | Prozess |
+|---|---|---|
+| **LOGA HR System** | | |
+| `LOGA_API_URL` | URL der LOGA Scout Report API (vorausgefüllt) | - |
+| `LOGA_ONBOARDING_JOB_FILE_CONTENT` | Base64-kodierter Schlüssel für LOGA Onboarding-Report (neue Mitarbeiter) — **vertraulich!** | Onboarding |
+| `LOGA_OFFBOARDING_JOB_FILE_CONTENT` | Base64-kodierter Schlüssel für LOGA Offboarding-Report (ausscheidende Mitarbeiter) — **vertraulich!** | Offboarding |
+| **SMTP (E-Mail-Versand)** | | |
+| `SMTP_HOST` | SMTP-Server (vorausgefüllt: `bindergroesswang-at.mail.protection.outlook.com`) | - |
+| `SMTP_PORT` | SMTP-Port (vorausgefüllt: 25) | - |
+| **Onboarding-Benachrichtigungen** | | |
+| `ONBOARDING_NOTIFICATION_EMAIL_TO` | Empfänger der Zusammenfassungs-E-Mail | Onboarding |
+| `ONBOARDING_NOTIFICATION_EMAIL_BCC` | BCC-Empfänger, kommagetrennt (optional) | Onboarding |
+| `ONBOARDING_NOTIFICATION_EMAIL_FROM` | Absender-Adresse | Onboarding |
+| **Offboarding-Benachrichtigungen** | | |
+| `OFFBOARDING_NOTIFICATION_EMAIL_TO` | Empfänger der Zusammenfassungs-E-Mail | Offboarding |
+| `OFFBOARDING_NOTIFICATION_EMAIL_BCC` | BCC-Empfänger, kommagetrennt (optional) | Offboarding |
+| `OFFBOARDING_NOTIFICATION_EMAIL_FROM` | Absender-Adresse | Offboarding |
+| **Fehlerbenachrichtigungen** | | |
+| `ERROR_NOTIFICATION_EMAIL` | Empfänger bei kritischen Fehlern | - |
+| **Offboarding-Konfiguration** | | |
+| `OFFBOARDING_ABSENCE_NOTICE` | Text der Auto-Reply-Abwesenheitsnotiz | Offboarding |
+| `OFFBOARDING_DISABLED_USERS_OU` | AD OU für deaktivierte Benutzer (z.B. `OU=Disabled Users,DC=bgr,DC=at`) | Offboarding |
+| **AD und Profil** | | |
+| `PROFILE_BASE_PATH` | UNC-Pfad zum Profilordner-Share (z.B. `\\bgr\dfs\Profile`) | Onboarding |
+| `DEFAULT_PASSWORD` | Standardpasswort für neue Postfächer | Onboarding |
+| `REMOTE_ROUTING_DOMAIN` | Remote-Routing-Domain für Exchange Online (z.B. `bindergroesswang-at.mail.onmicrosoft.com`) | Onboarding |
+| **Testmodus** | | |
+| `DRY_RUN` | `true` = nur loggen, nichts ändern; `false` = produktiv ausführen | - |
 
 ### 5. Testlauf (Dry Run)
 
@@ -429,7 +442,7 @@ logs/                    Automatisch erstellte Log-Dateien (nicht im Git)
 | `PowerShell-Fehler: Get-ADUser not recognized` | AD PowerShell-Modul installieren: `Install-WindowsFeature RSAT-AD-PowerShell` |
 | `New-RemoteMailbox not recognized` | Exchange Snap-In nicht verfügbar — Skript muss auf dem Exchange-Server laufen |
 | `SMTP connection refused` | Server-IP nicht auf dem Connector gewhitelistet, oder Port 25 blockiert |
-| `LOGA API gibt leere Daten zurück` | `LOGA_JOB_FILE_CONTENT` in `.env` prüfen |
+| `LOGA API gibt leere Daten zurück` | `LOGA_ONBOARDING_JOB_FILE_CONTENT` oder `LOGA_OFFBOARDING_JOB_FILE_CONTENT` in `.env` prüfen |
 | Benutzer wird übersprungen obwohl er neu ist | AD-Kürzel (SamAccountName) existiert bereits — manuell im AD prüfen |
 | Nach Fehler erneut ausführen: Postfach existiert schon | Das ist normal — das Skript erkennt den Benutzer als „vorhanden" und führt nur den Abgleich durch (Attribute, Gruppen, Profilordner) |
 | `git pull` schlägt fehl mit „unrelated histories" | `git fetch origin` dann `git reset --hard origin/main` — danach ist das lokale Repo synchron |
