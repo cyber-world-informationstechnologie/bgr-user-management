@@ -18,6 +18,7 @@ class Settings(BaseSettings):
 
     # Email
     notification_email_to: str = "markus.hinkel@cwi.at"
+    notification_email_bcc: str = ""
     notification_email_from: str = "onboarding@bgr.at"
     error_notification_email: str = "markus.hinkel@cwi.at"
 

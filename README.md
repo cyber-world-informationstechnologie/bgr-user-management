@@ -150,6 +150,7 @@ LOGA_JOB_FILE_CONTENT=<Wert von Markus erfragen>
 | `SMTP_HOST` | SMTP-Server für E-Mail-Versand (vorausgefüllt) |
 | `SMTP_PORT` | SMTP-Port, Standard 25 (vorausgefüllt) |
 | `NOTIFICATION_EMAIL_TO` | Empfänger der Zusammenfassungs-E-Mail |
+| `NOTIFICATION_EMAIL_BCC` | BCC-Empfänger (kommagetrennt, optional, z.B. `a@bgr.at,b@bgr.at`) |
 | `NOTIFICATION_EMAIL_FROM` | Absender-Adresse |
 | `ERROR_NOTIFICATION_EMAIL` | Empfänger bei Fehlern |
 | `PROFILE_BASE_PATH` | UNC-Pfad zum Profilordner-Share |
