@@ -17,7 +17,7 @@ Das Skript ruft die **LOGA HR-Schnittstelle** (P&I Scout API) auf und erhält ei
 Für jeden Benutzer wird per PowerShell im Active Directory geprüft, ob ein Konto mit dem Kürzel (SamAccountName) bereits vorhanden ist.
 
 - **Neuer Benutzer** → Vollständige Provisionierung (Postfach + Attribute + Gruppen + Profilordner)
-- **Bereits vorhandener Benutzer** → **Abgleich (Reconcile):** Die Postfach-Erstellung wird übersprungen, aber AD-Attribute, Gruppen und Profilordner werden erneut gesetzt. Dadurch werden fehlende oder fehlerhafte Werte automatisch korrigiert. Alle Operationen sind idempotent — ein wiederholter Lauf auf einem vollständig provisionierten Benutzer ist sicher und ändert nichts Ungewolltes.
+- **Bereits vorhandener Benutzer** → **Abgleich (Reconcile):** Die Postfach-Erstellung wird übersprungen, aber AD-Attribute, Gruppen und Profilordner werden erneut gesetzt. Dadurch werden fehlende oder fehlerhafte Werte automatisch korrigiert. Alle Operationen sind idempotent — ein wiederholter Lauf auf einem vollständig provisionierten Benutzer ist sicher.
 
 ### 3. Benutzer anlegen (außer Reinigungskräfte)
 Für neue Benutzer, die **nicht** die Stelle „Mitarbeiter*in Reinigung" haben, werden folgende Schritte ausgeführt:
@@ -32,9 +32,52 @@ Für neue Benutzer, die **nicht** die Stelle „Mitarbeiter*in Reinigung" haben,
   - **Basisgruppen** (alle Benutzer): `acc.Office365BusinessPremium`, `acc.M365Exchange`, `WorksiteLicencedUSers`, `Alle`, `acc.BGR-AI-Plattform`, `WorkSiteUsers`
   - **Standortgruppe** basierend auf dem Zimmer: z.B. `VIE_3OG` (3. OG Wien) oder `IBK_1OG` (Innsbruck)
   - **OU-Gruppe** basierend auf der Organisationseinheit: z.B. `OU_PARTNER`, `OU_SEKR`, `OU_RAA`
+  - **Verteilergruppen** basierend auf Stellenbezeichnung + Standort (siehe Tabelle unten)
   - **Team-Gruppe** im Format `Team-<Manager-Kürzel>`
 
 - **Profilordner erstellen** — Auf `\\bgr\dfs\Profile\<Kürzel>` wird ein Ordner erstellt. Der Benutzer wird als Besitzer gesetzt und erhält Vollzugriff, ebenso die Administratoren-Gruppe.
+
+#### Verteilergruppen nach Stellenbezeichnung
+
+Die folgende Tabelle zeigt, welche zusätzlichen Verteilergruppen je nach Position und Standort zugewiesen werden. Standort wird automatisch aus dem Zimmer abgeleitet (beginnt mit „I" → Innsbruck, sonst Wien).
+
+**Juristen und juristische Mitarbeiter:**
+
+| Stellenbezeichnung | Wien | Innsbruck | Beide Standorte |
+|---|---|---|---|
+| Rechtsanwaltsanwärter-in | Konzipienten-Wien | Konzipienten-Innsbruck | |
+| Anwalt/Anwältin - selbständig | Anwaelte-Wien | Anwaelte-Innsbruck | |
+| Counsel | Anwaelte-Wien | Anwaelte-Innsbruck | Counsel, Counsel-HR |
+| Partner-in | Partner-Wien | Partner-Innsbruck | |
+| Juristische-r Ferialpraktikant-in | | | Praktikanten |
+| Juristische-r Praktikant-in | | | Praktikanten |
+| Juristische-r Praktikant-in - geringfügig | | | Praktikanten |
+| Juristische Mitarbeiter\*in | | | Juristische Mitarbeiter |
+| Trademark Paralegal | | TMParalegal-Innsbruck | |
+
+**Leiter:**
+
+| Stellenbezeichnung | Wien | Innsbruck | Beide Standorte |
+|---|---|---|---|
+| Leiter-in IT | IT-Team | | Ausschussleiter |
+| Leiter-in KOM | KOM-Team | | Ausschussleiter |
+| Leiterin-in HR | HR-Team | | Ausschussleiter |
+| Leiter-in Finanzen | | | BUHA, HOVE, Ausschussleiter |
+| Leiter-in Rezeption | | | Rezeption intern, Rezeption |
+
+**Mitarbeiter:**
+
+| Stellenbezeichnung | Wien | Innsbruck | Beide Standorte |
+|---|---|---|---|
+| Mitarbeiter-in IT | IT-Team | | |
+| Mitarbeiter-in HR | HR-Team | | |
+| MP Assistent-in | OM-Team | | |
+| Mitarbeiter-in Bibliothek | Bibliothek | | |
+| Mitarbeiter-in KOM | kommunikation | | |
+| Sekretariat | Sekretariat-Wien | Sekretariat-Innsbruck | |
+| Rezeption | Rezeption intern, Rezeption | | |
+| Buchhalter-in | BUHA | | |
+| Honorarverrechner-in | HOVE | | |
 
 ### 4. Zusammenfassungs-E-Mail senden
 Am Ende wird eine HTML-E-Mail mit einer Tabelle aller verarbeiteten Benutzer versendet (Eintritt, Name, E-Mail, Kürzel, Telefon, Zimmer, Team, Stellenbezeichnung, Geburtsdatum, Kostenstelle, Berufsträger, Stundensatz, FTE). Der Versand erfolgt per direktem SMTP über den gewhitelisteten Connector — keine Authentifizierung notwendig.

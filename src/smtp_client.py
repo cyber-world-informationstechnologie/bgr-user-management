@@ -7,6 +7,7 @@ import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr
 
 from src.config import settings
 
@@ -22,11 +23,12 @@ def send_email(
     bcc_recipients: list[str] | None = None,
 ) -> None:
     """Send an HTML email via direct SMTP (port 25, no auth)."""
-    sender = from_address or settings.notification_email_from
+    sender_addr = from_address or settings.notification_email_from
+    sender_display = formataddr(("Onboarding Information", sender_addr))
     all_recipients = list(to_recipients) + (bcc_recipients or [])
 
     msg = MIMEMultipart("alternative")
-    msg["From"] = sender
+    msg["From"] = sender_display
     msg["To"] = ", ".join(to_recipients)
     msg["Subject"] = subject
     if bcc_recipients:
@@ -38,6 +40,6 @@ def send_email(
         return
 
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30) as smtp:
-        smtp.sendmail(sender, all_recipients, msg.as_string())
+        smtp.sendmail(sender_addr, all_recipients, msg.as_string())
 
     logger.info("Sent email '%s' to %s", subject, to_recipients)

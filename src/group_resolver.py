@@ -1,4 +1,4 @@
-"""Resolve AD group memberships for a user based on base groups, room, and OU."""
+"""Resolve AD group memberships for a user based on base groups, room, OU, and position."""
 
 from src.models import OnboardingUser
 
@@ -49,6 +49,109 @@ _OU_TO_GROUP: dict[str, str] = {
     "OU=Trademark Paralegal,": "OU_TRAD",
 }
 
+# ---------------------------------------------------------------------------
+# Position + location → distribution/security groups
+#
+# Each entry maps a LOGA position to either:
+#   - a list of groups (applied regardless of location)
+#   - a dict with "all" (always), "wien" (Vienna only), "ibk" (Innsbruck only)
+# ---------------------------------------------------------------------------
+_POSITION_GROUPS: dict[str, list[str] | dict[str, list[str]]] = {
+    # --- Juristen und juristische Mitarbeiter ---
+    "Rechtsanwaltsanwärter-in": {
+        "wien": ["Konzipienten-Wien"],
+        "ibk": ["Konzipienten-Innsbruck"],
+    },
+    "Anwalt/Anwältin - selbständig": {
+        "wien": ["Anwaelte-Wien"],
+        "ibk": ["Anwaelte-Innsbruck"],
+    },
+    "Counsel": {
+        "all": ["Counsel", "Counsel-HR"],
+        "wien": ["Anwaelte-Wien"],
+        "ibk": ["Anwaelte-Innsbruck"],
+    },
+    "Partner-in": {
+        "wien": ["Partner-Wien"],
+        "ibk": ["Partner-Innsbruck"],
+    },
+    "Juristische-r Ferialpraktikant-in": ["Praktikanten"],
+    "Juristische-r Praktikant-in": ["Praktikanten"],
+    "Juristische-r Praktikant-in - geringfügig": ["Praktikanten"],
+    "Juristische Mitarbeiter*in": ["Juristische Mitarbeiter"],
+    "Trademark Paralegal": {
+        "ibk": ["TMParalegal-Innsbruck"],
+    },
+    # --- Leiter ---
+    "Leiter-in IT": {
+        "all": ["Ausschussleiter"],
+        "wien": ["IT-Team"],
+    },
+    "Leiter-in KOM": {
+        "all": ["Ausschussleiter"],
+        "wien": ["KOM-Team"],
+    },
+    "Leiterin-in HR": {
+        "all": ["Ausschussleiter"],
+        "wien": ["HR-Team"],
+    },
+    "Leiter-in Finanzen": ["BUHA", "HOVE", "Ausschussleiter"],
+    "Leiter-in Rezeption": ["Rezeption intern", "Rezeption"],
+    # --- Mitarbeiter ---
+    "Mitarbeiter-in IT": {
+        "wien": ["IT-Team"],
+    },
+    "Mitarbeiter-in HR": {
+        "wien": ["HR-Team"],
+    },
+    "MP Assistent-in": {
+        "wien": ["OM-Team"],
+    },
+    "Mitarbeiter-in Bibliothek": {
+        "wien": ["Bibliothek"],
+    },
+    "Mitarbeiter-in KOM": {
+        "wien": ["kommunikation"],
+    },
+    "Sekretariat": {
+        "wien": ["Sekretariat-Wien"],
+        "ibk": ["Sekretariat-Innsbruck"],
+    },
+    "Rezeption": {
+        "wien": ["Rezeption intern", "Rezeption"],
+    },
+    "Buchhalter-in": {
+        "wien": ["BUHA"],
+    },
+    "Honorarverrechner-in": {
+        "wien": ["HOVE"],
+    },
+}
+
+
+def _is_innsbruck(user: OnboardingUser) -> bool:
+    """Return True if the user's room indicates the Innsbruck office."""
+    return bool(user.room and user.room.startswith("I"))
+
+
+def _resolve_position_groups(user: OnboardingUser) -> list[str]:
+    """Return distribution/security groups based on position and location."""
+    mapping = _POSITION_GROUPS.get(user.position)
+    if mapping is None:
+        return []
+
+    # Simple list → applies to all locations
+    if isinstance(mapping, list):
+        return list(mapping)
+
+    groups: list[str] = []
+    groups.extend(mapping.get("all", []))
+    if _is_innsbruck(user):
+        groups.extend(mapping.get("ibk", []))
+    else:
+        groups.extend(mapping.get("wien", []))
+    return groups
+
 
 def resolve_groups(user: OnboardingUser, ou: str) -> list[str]:
     """Return the complete list of AD groups the user should be added to.
@@ -57,6 +160,7 @@ def resolve_groups(user: OnboardingUser, ou: str) -> list[str]:
     1. Base groups (every user)
     2. Floor/location group based on room number
     3. OU-specific group
+    4. Position + location distribution groups
     """
     groups = list(BASE_GROUPS)
 
@@ -74,6 +178,9 @@ def resolve_groups(user: OnboardingUser, ou: str) -> list[str]:
             if ou_fragment in ou:
                 groups.append(group_name)
                 break
+
+    # Position + location distribution groups
+    groups.extend(_resolve_position_groups(user))
 
     # De-duplicate while preserving order
     seen: set[str] = set()
