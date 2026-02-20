@@ -5,7 +5,6 @@ description = "BGR User Onboarding - migrated from Power Automate"
 requires-python = ">=3.11"
 dependencies = [
     "requests>=2.31.0",
-    "msal>=1.28.0",
     "python-dotenv>=1.0.0",
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",

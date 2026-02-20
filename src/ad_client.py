@@ -13,6 +13,28 @@ from src.models import OnboardingUser
 logger = logging.getLogger(__name__)
 
 
+def _escape(value: str) -> str:
+    """Escape a string for safe embedding in a PowerShell single-quoted string."""
+    return value.replace("'", "''")
+
+
+def user_exists_in_ad(abbreviation: str) -> bool:
+    """Check if a user with the given SamAccountName already exists in AD."""
+    if not abbreviation:
+        return False
+
+    result = subprocess.run(
+        [
+            "powershell", "-NoProfile", "-NonInteractive", "-Command",
+            f"if (Get-ADUser -Filter {{SamAccountName -eq '{_escape(abbreviation)}'}}) {{ 'FOUND' }} else {{ 'NOTFOUND' }}",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    return "FOUND" in result.stdout
+
+
 def _run_ps(script: str, *, description: str) -> subprocess.CompletedProcess[str]:
     """Execute a PowerShell script block and return the result."""
     logger.debug("Running PowerShell [%s]:\n%s", description, script)
@@ -40,11 +62,6 @@ def _run_ps(script: str, *, description: str) -> subprocess.CompletedProcess[str
 
     logger.debug("PowerShell [%s] output: %s", description, result.stdout.strip())
     return result
-
-
-def _escape(value: str) -> str:
-    """Escape a string for safe embedding in a PowerShell double-quoted string."""
-    return value.replace("'", "''")
 
 
 def create_mailbox(user: OnboardingUser, *, ou: str) -> None:

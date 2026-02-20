@@ -6,10 +6,9 @@ class Settings(BaseSettings):
     loga_api_url: str = "https://BGR.pi-asp.de/loga3/scout/api/v1/executeScoutReportJobAndGetFile"
     loga_job_file_content: str = ""
 
-    # Microsoft Entra ID (Azure AD)
-    azure_tenant_id: str = ""
-    azure_client_id: str = ""
-    azure_client_secret: str = ""
+    # SMTP (whitelisted connector, no auth)
+    smtp_host: str = "bindergroesswang-at.mail.protection.outlook.com"
+    smtp_port: int = 25
 
     # Email
     notification_email_to: str = "markus.hinkel@cwi.at"
