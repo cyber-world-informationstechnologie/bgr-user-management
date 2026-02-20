@@ -29,8 +29,22 @@ def fetch_new_users() -> list[OnboardingUser]:
     )
     response.raise_for_status()
 
+    logger.debug(f"LOGA response status: {response.status_code}")
+    logger.debug(f"LOGA response headers: {response.headers}")
+    logger.debug(f"LOGA response text length: {len(response.text)}")
+    
+    if not response.text.strip():
+        logger.warning("LOGA API returned empty response")
+        return []
+    
     # The API returns a JSON body with a base64-encoded '$content' field
-    body = response.json()
+    try:
+        body = response.json()
+    except ValueError as e:
+        logger.error(f"Failed to parse JSON response: {e}")
+        logger.debug(f"Response text (first 500 chars): {response.text[:500]}")
+        raise
+    
     encoded_content: str = body.get("$content", "")
 
     if not encoded_content:
@@ -68,8 +82,22 @@ def fetch_exiting_users() -> list[OffboardingUser]:
     )
     response.raise_for_status()
 
+    logger.debug(f"LOGA response status: {response.status_code}")
+    logger.debug(f"LOGA response headers: {response.headers}")
+    logger.debug(f"LOGA response text length: {len(response.text)}")
+    
+    if not response.text.strip():
+        logger.warning("LOGA API returned empty response")
+        return []
+    
     # The API returns a JSON body with a base64-encoded '$content' field
-    body = response.json()
+    try:
+        body = response.json()
+    except ValueError as e:
+        logger.error(f"Failed to parse JSON response: {e}")
+        logger.debug(f"Response text (first 500 chars): {response.text[:500]}")
+        raise
+    
     encoded_content: str = body.get("$content", "")
 
     if not encoded_content:
