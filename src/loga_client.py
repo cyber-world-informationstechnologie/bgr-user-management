@@ -1,6 +1,9 @@
 """Client for the LOGA HR system API (P&I / pi-asp.de)."""
 
 import base64
+import csv
+import io
+import json
 import logging
 
 import requests
@@ -14,7 +17,7 @@ logger = logging.getLogger(__name__)
 def fetch_new_users() -> list[OnboardingUser]:
     """Fetch upcoming new employees from the LOGA Scout report API.
 
-    Returns a list of OnboardingUser objects parsed from the LOGA response.
+    Returns a list of OnboardingUser objects parsed from the LOGA CSV response.
     """
     logger.info("Fetching new users from LOGA API…")
 
@@ -37,30 +40,31 @@ def fetch_new_users() -> list[OnboardingUser]:
         logger.warning("LOGA API returned empty response")
         return []
     
-    # The API returns a JSON body with a base64-encoded '$content' field
-    try:
-        body = response.json()
-    except ValueError as e:
-        logger.error(f"Failed to parse JSON response: {e}")
-        logger.debug(f"Response text (first 500 chars): {response.text[:500]}")
-        raise
+    # The API with outputFormat=CSV returns CSV directly (not JSON)
+    content_type = response.headers.get("Content-Type", "").lower()
     
-    encoded_content: str = body.get("$content", "")
-
-    if not encoded_content:
-        # Some responses may already be plain JSON
-        data_payload = body
+    if "octet-stream" in content_type or response.text.startswith("Kürzel"):
+        # Direct CSV response
+        logger.debug("Parsing direct CSV response")
+        return _parse_csv_response(response.text, OnboardingUser)
     else:
+        # Try JSON with base64-encoded CSV
+        logger.debug("Attempting to parse JSON response")
+        try:
+            body = response.json()
+        except ValueError as e:
+            logger.error(f"Failed to parse JSON response: {e}")
+            logger.debug(f"Response text (first 500 chars): {response.text[:500]}")
+            raise
+        
+        encoded_content: str = body.get("$content", "")
+        if not encoded_content:
+            logger.warning("No $content field in JSON response")
+            return []
+        
         decoded_bytes = base64.b64decode(encoded_content)
-        import json
-
-        data_payload = json.loads(decoded_bytes)
-
-    rows: list[list[str]] = data_payload.get("data", [])
-    logger.info("LOGA returned %d user rows", len(rows))
-
-    users = [OnboardingUser.from_loga_row(row) for row in rows]
-    return users
+        csv_text = decoded_bytes.decode("utf-8")
+        return _parse_csv_response(csv_text, OnboardingUser)
 
 
 def fetch_exiting_users() -> list[OffboardingUser]:
@@ -90,26 +94,59 @@ def fetch_exiting_users() -> list[OffboardingUser]:
         logger.warning("LOGA API returned empty response")
         return []
     
-    # The API returns a JSON body with a base64-encoded '$content' field
-    try:
-        body = response.json()
-    except ValueError as e:
-        logger.error(f"Failed to parse JSON response: {e}")
-        logger.debug(f"Response text (first 500 chars): {response.text[:500]}")
-        raise
+    # The API with outputFormat=CSV returns CSV directly (not JSON)
+    content_type = response.headers.get("Content-Type", "").lower()
     
-    encoded_content: str = body.get("$content", "")
-
-    if not encoded_content:
-        # Some responses may already be plain JSON
-        data_payload = body
+    if "octet-stream" in content_type or response.text.startswith("Kürzel"):
+        # Direct CSV response
+        logger.debug("Parsing direct CSV response")
+        return _parse_csv_response(response.text, OffboardingUser)
     else:
+        # Try JSON with base64-encoded CSV
+        logger.debug("Attempting to parse JSON response")
+        try:
+            body = response.json()
+        except ValueError as e:
+            logger.error(f"Failed to parse JSON response: {e}")
+            logger.debug(f"Response text (first 500 chars): {response.text[:500]}")
+            raise
+        
+        encoded_content: str = body.get("$content", "")
+        if not encoded_content:
+            logger.warning("No $content field in JSON response")
+            return []
+        
         decoded_bytes = base64.b64decode(encoded_content)
-        import json
+        csv_text = decoded_bytes.decode("utf-8")
+        return _parse_csv_response(csv_text, OffboardingUser)
 
-        data_payload = json.loads(decoded_bytes)
 
-    rows: list[list[str]] = data_payload.get("data", [])
-    logger.info("LOGA returned %d exiting user rows", len(rows))
-
-    users = [OffboardingUser.from_loga_row(row) for row in rows]
+def _parse_csv_response(csv_text: str, model_class) -> list:
+    """Parse CSV response from LOGA API.
+    
+    Args:
+        csv_text: The CSV content as a string
+        model_class: OnboardingUser or OffboardingUser class to instantiate
+    
+    Returns:
+        List of model instances parsed from CSV rows
+    """
+    csv_reader = csv.reader(io.StringIO(csv_text), delimiter=";")
+    
+    # Skip header row
+    header = next(csv_reader, None)
+    if not header:
+        logger.warning("CSV response has no header")
+        return []
+    
+    logger.debug(f"CSV header: {header}")
+    
+    rows = []
+    for row in csv_reader:
+        if row and any(row):  # Skip empty rows
+            rows.append(row)
+    
+    logger.info("LOGA returned %d user rows from CSV", len(rows))
+    
+    users = [model_class.from_loga_row(row) for row in rows]
+    return users

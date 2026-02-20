@@ -74,6 +74,11 @@ def main() -> None:
         help="Choose the process to run",
     )
     parser.add_argument(
+        "--resend",
+        action="store_true",
+        help="Resend notifications for offboarding users who have already been processed (offboarding mode only)",
+    )
+    parser.add_argument(
         "--wait",
         action="store_true",
         help="Wait for user input before exiting (useful for debugging)",
@@ -86,7 +91,7 @@ def main() -> None:
         if args.mode == "onboarding":
             run_onboarding()
         elif args.mode == "offboarding":
-            run_offboarding()
+            run_offboarding(resend=args.resend)
         logger.info("Process completed successfully")
     except Exception as e:
         logger.error("Process failed with exception: %s", e, exc_info=True)
