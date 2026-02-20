@@ -147,7 +147,7 @@ Set-ADUser `
         st                           = '{_escape(address.state)}'
         Title                        = '{_escape(job_title)}'
         Description                  = '{_escape(job_title)}'
-        IPPhone                      = '{_escape(user.phone)}'
+        IPPhone                      = '{_escape(user.phone_extension)}'
     }} `
     -Verbose
 """

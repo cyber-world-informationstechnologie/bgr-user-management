@@ -114,3 +114,9 @@ class OnboardingUser:
     @property
     def is_reinigungskraft(self) -> bool:
         return self.position == "Mitarbeiter*in Reinigung"
+
+    @property
+    def phone_extension(self) -> str:
+        """Extract the last 3 digits from the phone number as the extension (DW)."""
+        digits = "".join(c for c in self.phone if c.isdigit())
+        return digits[-3:] if len(digits) >= 3 else digits
