@@ -128,10 +128,10 @@ if (-not $userdn) {{
     exit 1
 }}
 
-# Extension attributes
-Set-ADUser -Identity $userdn -Add @{{"extensionattribute1"='{_escape(user.title_pre)}'}}
-Set-ADUser -Identity $userdn -Add @{{"extensionattribute2"='{_escape(user.title_post)}'}}
-Set-ADUser -Identity $userdn -Add @{{"extensionattribute5"='{_escape(job_title)}'}}
+# Extension attributes (use -Replace so re-runs are idempotent)
+Set-ADUser -Identity $userdn -Replace @{{"extensionattribute1"='{_escape(user.title_pre)}'}}
+Set-ADUser -Identity $userdn -Replace @{{"extensionattribute2"='{_escape(user.title_post)}'}}
+Set-ADUser -Identity $userdn -Replace @{{"extensionattribute5"='{_escape(job_title)}'}}
 
 # Standard attributes
 Set-ADUser `
@@ -163,8 +163,8 @@ $managerObject = Get-ADUser -Filter {{ SamAccountName -eq '{_escape(manager_abre
 
 if ($managerObject) {{
     Set-ADUser -Identity $userdn -Manager $managerObject.DistinguishedName
-    Set-ADUser -Identity $userdn -Add @{{"extensionattribute15"= $managerObject.DisplayName }}
-    Set-ADUser -Identity $userdn -Add @{{"extensionattribute14"= ($managerObject.extensionAttribute1 + ' ' + $managerObject.DisplayName + ' ' + $managerObject.extensionAttribute2) }}
+    Set-ADUser -Identity $userdn -Replace @{{"extensionattribute15"= $managerObject.DisplayName }}
+    Set-ADUser -Identity $userdn -Replace @{{"extensionattribute14"= ($managerObject.extensionAttribute1 + ' ' + $managerObject.DisplayName + ' ' + $managerObject.extensionAttribute2) }}
 }} else {{
     Write-Warning 'Manager {_escape(manager_abrev)} not found in AD'
 }}
@@ -297,6 +297,26 @@ def provision_user(
     Returns list of groups that failed to be assigned.
     """
     create_mailbox(user, ou=ou)
+    set_ad_attributes(user, job_title=job_title)
+    failed_groups = add_to_groups(user, groups)
+    create_profile_folder(user)
+    return failed_groups
+
+
+def reconcile_user(
+    user: OnboardingUser,
+    *,
+    job_title: str,
+    ou: str,
+    groups: list[str],
+) -> list[str]:
+    """Re-apply AD attributes, groups, and profile folder for an existing user.
+
+    Skips mailbox creation (the account already exists).  All operations are
+    idempotent — running them on a fully-provisioned user is safe.
+
+    Returns list of groups that failed to be assigned.
+    """
     set_ad_attributes(user, job_title=job_title)
     failed_groups = add_to_groups(user, groups)
     create_profile_folder(user)

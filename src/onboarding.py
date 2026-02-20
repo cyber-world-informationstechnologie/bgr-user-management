@@ -7,7 +7,7 @@ the whitelisted Exchange connector.
 
 import logging
 
-from src.ad_client import provision_user, user_exists_in_ad
+from src.ad_client import provision_user, reconcile_user, user_exists_in_ad
 from src.config import settings
 from src.email_builder import EmailRow, build_onboarding_email
 from src.smtp_client import send_email
@@ -20,8 +20,11 @@ from src.ou_resolver import resolve_ou
 logger = logging.getLogger(__name__)
 
 
-def _process_user(user: OnboardingUser) -> EmailRow | None:
-    """Process a single user: provision on-premise and collect email data.
+def _process_user(user: OnboardingUser, *, exists: bool) -> EmailRow | None:
+    """Process a single user: provision or reconcile on-premise, collect email data.
+
+    If *exists* is True the mailbox creation is skipped and only AD attributes,
+    groups and the profile folder are (re-)applied.
 
     Returns an EmailRow for the summary email, or None if the user was skipped.
     """
@@ -32,12 +35,21 @@ def _process_user(user: OnboardingUser) -> EmailRow | None:
     # Skip user creation for Reinigungskraft (cleaning staff)
     if not user.is_reinigungskraft:
         try:
-            failed_groups = provision_user(
-                user,
-                job_title=job_title,
-                ou=ou,
-                groups=groups,
-            )
+            if exists:
+                logger.info("Reconciling existing user %s", user.email)
+                failed_groups = reconcile_user(
+                    user,
+                    job_title=job_title,
+                    ou=ou,
+                    groups=groups,
+                )
+            else:
+                failed_groups = provision_user(
+                    user,
+                    job_title=job_title,
+                    ou=ou,
+                    groups=groups,
+                )
             if failed_groups:
                 logger.warning(
                     "User %s: failed to add to groups: %s",
@@ -112,11 +124,11 @@ def run_onboarding() -> None:
             continue
 
         # Check if user already exists in AD
-        if user_exists_in_ad(user.abbreviation):
-            logger.info("User %s already exists in AD, skipping", user.abbreviation)
-            continue
+        exists = user_exists_in_ad(user.abbreviation)
+        if exists:
+            logger.info("User %s already exists in AD — will reconcile attributes", user.abbreviation)
 
-        row = _process_user(user)
+        row = _process_user(user, exists=exists)
         if row:
             email_rows.append(row)
 
