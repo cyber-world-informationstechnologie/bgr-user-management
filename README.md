@@ -1,25 +1,31 @@
 # bgr-user-management
 
-Automatisiertes Benutzer-Onboarding für Binder Grösswang (BGR). Ursprünglich als Power Automate + Power Automate Desktop Flow umgesetzt, wurde der Prozess wegen Unzuverlässigkeit nach Python migriert.
+Automatisiertes Benutzer-Onboarding und -Offboarding für Binder Grösswang (BGR). Ursprünglich als Power Automate + Power Automate Desktop Flow umgesetzt, wurde der Prozess wegen Unzuverlässigkeit nach Python migriert.
 
 Das Skript läuft direkt auf dem Exchange-Server und erstellt vollautomatisch neue Benutzerkonten in Active Directory, legt Exchange-Postfächer an, setzt AD-Attribute, weist Gruppen zu, erstellt Profilordner und versendet eine Zusammenfassungs-E-Mail.
+
+Beim Offboarding werden Benutzer (am Tag nach dem Austrittsdatum) automatisch deaktiviert, ihre Postfächer in Shared Mailboxes umgewandelt, E-Mail-Weiterleitungen eingerichtet und alle Gruppenzugehörigkeiten entfernt.
 
 ---
 
 ## Was macht das Skript?
 
+Das Skript unterstützt zwei Prozesse:
+
+### 🟢 **ONBOARDING** — Neue Mitarbeiter aufnehmen
+
 Der Ablauf besteht aus vier Hauptschritten:
 
-### 1. Neue Mitarbeiter aus LOGA laden
+#### 1. Neue Mitarbeiter aus LOGA laden
 Das Skript ruft die **LOGA HR-Schnittstelle** (P&I Scout API) auf und erhält eine Liste aller bevorstehenden Eintritte. Die Daten kommen als JSON-Array, wobei jeder Eintrag 20 Felder enthält (Personalnummer, Name, Titel, Kürzel, Zimmer, Team, Stellenbezeichnung, usw.).
 
-### 2. Prüfen, ob der Benutzer bereits existiert
+#### 2. Prüfen, ob der Benutzer bereits existiert
 Für jeden Benutzer wird per PowerShell im Active Directory geprüft, ob ein Konto mit dem Kürzel (SamAccountName) bereits vorhanden ist.
 
 - **Neuer Benutzer** → Vollständige Provisionierung (Postfach + Attribute + Gruppen + Profilordner)
 - **Bereits vorhandener Benutzer** → **Abgleich (Reconcile):** Die Postfach-Erstellung wird übersprungen, aber AD-Attribute, Gruppen und Profilordner werden erneut gesetzt. Dadurch werden fehlende oder fehlerhafte Werte automatisch korrigiert. Alle Operationen sind idempotent — ein wiederholter Lauf auf einem vollständig provisionierten Benutzer ist sicher.
 
-### 3. Benutzer anlegen (außer Reinigungskräfte)
+#### 3. Benutzer anlegen (außer Reinigungskräfte)
 Für neue Benutzer, die **nicht** die Stelle „Mitarbeiter*in Reinigung" haben, werden folgende Schritte ausgeführt:
 
 - **Remote-Mailbox erstellen** — Über `New-RemoteMailbox` wird auf dem Exchange-Server ein AD-Konto erstellt, das auf ein Cloud-Postfach in Exchange Online geroutet wird (via `RemoteRoutingAddress` auf `*.mail.onmicrosoft.com`). Das Konto wird in die korrekte Organisationseinheit (OU) einsortiert, die sich aus der Stellenbezeichnung ergibt (z.B. Partner → `OU=Partner-in`, Sekretariat → `OU=Sekretariat`).
@@ -37,7 +43,10 @@ Für neue Benutzer, die **nicht** die Stelle „Mitarbeiter*in Reinigung" haben,
 
 - **Profilordner erstellen** — Auf `\\bgr\dfs\Profile\<Kürzel>` wird ein Ordner erstellt. Der Benutzer wird als Besitzer gesetzt und erhält Vollzugriff, ebenso die Administratoren-Gruppe.
 
-#### Verteilergruppen nach Stellenbezeichnung
+#### 4. Zusammenfassungs-E-Mail senden
+Am Ende wird eine HTML-E-Mail mit einer Tabelle aller verarbeiteten Benutzer versendet (Eintritt, Name, E-Mail, Kürzel, Telefon, Zimmer, Team, Stellenbezeichnung, Geburtsdatum, Kostenstelle, Berufsträger, Stundensatz, FTE). Der Versand erfolgt per direktem SMTP über den gewhitelisteten Connector — keine Authentifizierung notwendig.
+
+##### Verteilergruppen nach Stellenbezeichnung
 
 Die folgende Tabelle zeigt, welche zusätzlichen Verteilergruppen je nach Position und Standort zugewiesen werden. Standort wird automatisch aus dem Zimmer abgeleitet (beginnt mit „I" → Innsbruck, sonst Wien).
 
@@ -79,8 +88,34 @@ Die folgende Tabelle zeigt, welche zusätzlichen Verteilergruppen je nach Positi
 | Buchhalter-in | BUHA | | |
 | Honorarverrechner-in | HOVE | | |
 
-### 4. Zusammenfassungs-E-Mail senden
-Am Ende wird eine HTML-E-Mail mit einer Tabelle aller verarbeiteten Benutzer versendet (Eintritt, Name, E-Mail, Kürzel, Telefon, Zimmer, Team, Stellenbezeichnung, Geburtsdatum, Kostenstelle, Berufsträger, Stundensatz, FTE). Der Versand erfolgt per direktem SMTP über den gewhitelisteten Connector — keine Authentifizierung notwendig.
+---
+
+### 🔴 **OFFBOARDING** — Mitarbeiter entfernen
+
+Das Offboarding läuft **am Tag nach dem Austrittsdatum** (Letzter Arbeitstag) automatisch ab:
+
+#### Phase 1: Informationen von P&I
+- ✅ Austrittsdatum ("Letzter Arbeitstag") wird aus LOGA-System geladen
+- ✅ Offboarding-Benachrichtigungsemail wird versendet, sobald die Person in der P&I-Auswertung aufscheint
+
+#### Phase 2: Exchange-Maßnahmen (nächster Tag nach Austrittsdatum)
+
+- **Umwandlung zu Shared Mailbox**: Das persönliche Postfach wird in eine Shared Mailbox konvertiert, damit das Team darauf zugreifen kann
+- **E-Mail-Weiterleitung**: Automatische Weiterleitung der E-Mails an den Vorgesetzten wird eingerichtet
+- **Zustellungskopie**: E-Mails werden weiterhin auch im ursprünglichen Postfach zugestellt
+- **Abwesenheitsnotiz**: Automatisch-Antwort (Out-of-Office) wird gesetzt mit:
+  - Vorlage aus Marketing
+  - Kein Enddatum (bleibt permanent aktiv)
+- **Verteilerlisten**: Benutzer wird aus allen E-Mail-Gruppen entfernt
+
+#### Phase 3: Active Directory-Maßnahmen
+
+- **Konto deaktivieren**: Das AD-Benutzerkonto wird deaktiviert (disabled)
+- **In "Disabled Users" verschieben**: Das Konto wird in die OU `OU=Disabled Users,DC=bgr,DC=at` verschoben
+- **Gruppenmitgliedschaften entfernen**: Der Benutzer wird aus sämtlichen Gruppen entfernt, mit Ausnahme von `Domain Users` (da dies nicht deaktivierbar ist)
+
+#### Phase 4: Benachrichtigungen
+- ✅ Zusammenfassungs-E-Mail mit allen verarbeiteten Austritten wird an Stakeholder versendet
 
 ---
 
@@ -146,13 +181,17 @@ LOGA_JOB_FILE_CONTENT=<Wert von Markus erfragen>
 | Variable | Beschreibung |
 |---|---|
 | `LOGA_API_URL` | URL der LOGA Scout Report API (vorausgefüllt) |
-| `LOGA_JOB_FILE_CONTENT` | Base64-kodierter Schlüssel für den LOGA-Report — **vertraulich, nicht ins Git committen!** |
+| `LOGA_JOB_FILE_CONTENT` | Base64-kodierter Schlüssel für den LOGA Onboarding-Report — **vertraulich, nicht ins Git committen!** |
+| `LOGA_OFFBOARDING_JOB_FILE_CONTENT` | Base64-kodierter Schlüssel für den LOGA Offboarding-Report (ausscheidende Mitarbeiter) — **vertraulich, nicht ins Git committen!** |
 | `SMTP_HOST` | SMTP-Server für E-Mail-Versand (vorausgefüllt) |
 | `SMTP_PORT` | SMTP-Port, Standard 25 (vorausgefüllt) |
-| `NOTIFICATION_EMAIL_TO` | Empfänger der Zusammenfassungs-E-Mail |
+| `NOTIFICATION_EMAIL_TO` | Empfänger der Zusammenfassungs-E-Mail (Onboarding) |
 | `NOTIFICATION_EMAIL_BCC` | BCC-Empfänger (kommagetrennt, optional, z.B. `a@bgr.at,b@bgr.at`) |
-| `NOTIFICATION_EMAIL_FROM` | Absender-Adresse |
+| `NOTIFICATION_EMAIL_FROM` | Absender-Adresse (Onboarding) |
+| `OFFBOARDING_EMAIL_FROM` | Absender-Adresse (Offboarding) |
 | `ERROR_NOTIFICATION_EMAIL` | Empfänger bei Fehlern |
+| `OFFBOARDING_ABSENCE_NOTICE` | Text der Abwesenheitsnotiz bei Austritten (Auto-Reply) |
+| `DISABLED_USERS_OU` | AD Organisationseinheit für deaktivierte Benutzer (z.B. `OU=Disabled Users,DC=bgr,DC=at`) |
 | `PROFILE_BASE_PATH` | UNC-Pfad zum Profilordner-Share |
 | `DEFAULT_PASSWORD` | Standardpasswort für neue Postfächer |
 | `REMOTE_ROUTING_DOMAIN` | Remote-Routing-Domain für Exchange Online (z.B. `bindergroesswang-at.mail.onmicrosoft.com`) |
@@ -161,7 +200,7 @@ LOGA_JOB_FILE_CONTENT=<Wert von Markus erfragen>
 ### 5. Testlauf (Dry Run)
 
 ```powershell
-.\.venv\Scripts\python.exe main.py
+.\.venv\Scripts\python.exe main.py onboarding
 ```
 
 Im Dry-Run-Modus wird nichts verändert. Das Skript loggt, was es tun würde:
@@ -178,26 +217,167 @@ In der `.env` den Wert ändern:
 DRY_RUN=false
 ```
 
-Dann erneut ausführen:
-
+Für **Onboarding**:
 ```powershell
-.\.venv\Scripts\python.exe main.py
+.\.venv\Scripts\python.exe main.py onboarding
+```
+
+Für **Offboarding**:
+```powershell
+.\.venv\Scripts\python.exe main.py offboarding
 ```
 
 ---
 
-## Als geplanten Task einrichten (Task Scheduler)
+## Als geplante Tasks einrichten (Task Scheduler)
 
-Damit das Skript automatisch läuft (z.B. täglich um 7:00):
+Es empfiehlt sich, sowohl das Onboarding als auch das Offboarding als geplante Tasks zu konfigurieren:
+
+### Option 1: Verwendung der vorgefertigten .bat-Dateien (einfach)
+
+Das Projekt enthält zwei vorgefertigte `.bat`-Dateien, die automatisch:
+- Das Virtual Environment aktivieren
+- Die `.env`-Datei prüfen
+- Das Logging-Verzeichnis erstellen
+- Den Python-Prozess aufrufen
+
+#### Onboarding — täglich um 06:00
+| Feld | Wert |
+|---|---|
+| **Programm** | `C:\Tasks\User-Management\run-onboarding.bat` |
+| **Working Directory** | `C:\Tasks\User-Management` |
+| **Trigger** | Täglich, 06:00 |
+| **Run as** | Service-Account mit AD/Exchange-Berechtigungen |
+
+#### Offboarding — täglich um 08:00
+| Feld | Wert |
+|---|---|
+| **Programm** | `C:\Tasks\User-Management\run-offboarding.bat` |
+| **Working Directory** | `C:\Tasks\User-Management` |
+| **Trigger** | Täglich, 08:00 |
+| **Run as** | Service-Account mit AD/Exchange-Berechtigungen |
+
+### Option 2: Direkter Python-Aufruf (fortgeschritten)
+
+Falls Sie den Python-Prozess direkt aufrufen möchten:
 
 | Feld | Wert |
 |---|---|
-| Programm | `C:\Tasks\User-Management\.venv\Scripts\python.exe` |
-| Argumente | `C:\Tasks\User-Management\main.py` |
-| Starten in | `C:\Tasks\User-Management` |
-| Ausführen als | Ein Service-Account mit AD/Exchange-Berechtigungen |
+| **Programm** | `C:\Tasks\User-Management\.venv\Scripts\python.exe` |
+| **Argumente** | `main.py onboarding` (oder `offboarding`) |
+| **Working Directory** | `C:\Tasks\User-Management` |
 
-> **Wichtig:** „Starten in" muss auf das Projektverzeichnis zeigen, weil das Skript dort die `.env`-Datei sucht.
+---
+
+## Logging
+
+Das System schreibt Logs automatisch in das Verzeichnis `logs/`:
+
+```
+logs/
+  onboarding_20260220_060000.log    ← Onboarding
+  offboarding_20260220_080000.log   ← Offboarding
+  ...
+```
+
+### Log-Details
+
+**Jede Log-Datei enthält:**
+- ✅ Auf der Konsole: `INFO` und höher (Warning, Error)
+- ✅ In der Datei: `DEBUG` und höher (alles)
+- 🕐 Zeitstempel im Format `YYYY-MM-DD HH:MM:SS`
+- 🏷️ Level, Logger-Name, Nachricht
+
+### Log-Beispiel
+
+```
+2026-02-20 06:00:00 [INFO] bgr-user-management: ================================================================================
+2026-02-20 06:00:00 [INFO] bgr-user-management: BGR User Management — ONBOARDING Process Started
+2026-02-20 06:00:00 [INFO] bgr-user-management: Log file: logs/onboarding_20260220_060000.log
+2026-02-20 06:00:00 [INFO] bgr-user-management: ================================================================================
+2026-02-20 06:00:05 [INFO] src.loga_client: Fetching new users from LOGA API…
+2026-02-20 06:00:10 [INFO] src.loga_client: LOGA returned 5 user rows
+...
+2026-02-20 06:00:30 [INFO] bgr-user-management: Process completed successfully
+```
+
+### Log-Dateien aufräumen
+
+Nach einiger Zeit sollten alte Log-Dateien gelöscht werden. Sie können ein weiteres Scheduled-Task erstellen:
+
+```powershell
+# PowerShell-Script zum Löschen von Logs älter als 90 Tage
+$logDir = "C:\Tasks\User-Management\logs"
+$daysToKeep = 90
+$cutoffDate = (Get-Date).AddDays(-$daysToKeep)
+
+Get-ChildItem -Path $logDir -Filter "*.log" | Where-Object {
+    $_.LastWriteTime -lt $cutoffDate
+} | Remove-Item -Force
+
+Write-Output "Cleaned up logs older than $daysToKeep days"
+```
+
+---
+
+## Scheduled Tasks erstellen
+
+Nachdem das Projekt eingerichtet ist, können Sie die geplanten Tasks einrichten. Es gibt zwei Wege:
+
+### Methode 1: Task Scheduler GUI (einfach)
+
+**Onboarding erstellen:**
+1. Öffnen Sie **Task Scheduler** (Startmenü → Taskplaner)
+2. Klicken Sie auf **Create Basic Task...**
+3. **Name:** `BGR Onboarding` | **Description:** `Daily user onboarding`
+4. **Trigger:** Daily | **6:00:00 AM** | **Recur every 1 day**
+5. **Action:** Start a program
+   - **Program/script:** `C:\Tasks\User-Management\run-onboarding.bat`
+   - **Start in:** `C:\Tasks\User-Management`
+6. **Conditions:**
+   - ✅ Break down Idle conditions (Enabled)
+   - ✅ Start the task only if the computer is on AC power
+7. **Settings:**
+   - ✅ Allow task to be run on demand
+   - ✅ If the task fails, restart every 1 minute (max. 3 times)
+   - ✅ Stop the task if it runs longer than 1 hour
+8. **Finish**
+
+**Offboarding erstellen:**
+Gleich wie Onboarding, aber:
+- **Name:** `BGR Offboarding`
+- **Program/script:** `C:\Tasks\User-Management\run-offboarding.bat`
+- **Trigger:** Daily, **8:00:00 AM** (nach Onboarding!)
+
+### Methode 2: Via PowerShell (Skript)
+
+```powershell
+$taskPath = "C:\Tasks\User-Management"
+$batOnboarding = "$taskPath\run-onboarding.bat"
+$batOffboarding = "$taskPath\run-offboarding.bat"
+
+# Onboarding Task erstellen
+$action = New-ScheduledTaskAction -Execute $batOnboarding -WorkingDirectory $taskPath
+$trigger = New-ScheduledTaskTrigger -Daily -At 6:00am
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+
+Register-ScheduledTask -Action $action -Trigger $trigger -Settings $settings `
+    -TaskName "BGR Onboarding" -Description "Daily user onboarding from LOGA" -AsJob
+
+Write-Host "✅ Onboarding Task erstellt"
+
+# Offboarding Task erstellen
+$action = New-ScheduledTaskAction -Execute $batOffboarding -WorkingDirectory $taskPath
+$trigger = New-ScheduledTaskTrigger -Daily -At 8:00am
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+
+Register-ScheduledTask -Action $action -Trigger $trigger -Settings $settings `
+    -TaskName "BGR Offboarding" -Description "Daily user offboarding after exit date" -AsJob
+
+Write-Host "✅ Offboarding Task erstellt"
+```
+
+> **Wichtig:** Die Service-Account muss AD/Exchange-Berechtigungen haben. Prüfen Sie die Task-Eigenschaften und setzen Sie die richtige **Run as**-Benutzer.
 
 ---
 
@@ -219,19 +399,24 @@ Falls nur Python-Dateien geändert wurden (keine neuen Abhängigkeiten), reicht 
 ```
 src/
   config.py              Einstellungen aus .env (Pydantic Settings)
-  models.py              OnboardingUser Datenmodell (LOGA-Felder → benannte Attribute)
-  loga_client.py         LOGA HR API Client (holt neue Mitarbeiter)
-  ad_client.py           AD/Exchange-Provisionierung via PowerShell (Postfach, Attribute, Gruppen, Profilordner)
+  models.py              OnboardingUser & OffboardingUser Datenmodelle
+  loga_client.py         LOGA HR API Client (holt neue/ausscheidende Mitarbeiter)
+  ad_client.py           AD/Exchange-Provisionierung & -Deprovisioning via PowerShell
   smtp_client.py         E-Mail-Versand via SMTP (gewhitelisteter Connector, ohne Auth)
-  job_title_resolver.py  Geschlechtsspezifische Stellenbezeichnung (z.B. „Partner*in" → „Partner" / „Partnerin")
-  ou_resolver.py         Stellenbezeichnung → AD Organisationseinheit (OU)
-  group_resolver.py      Ermittlung der AD-Gruppenmitgliedschaften
-  email_builder.py       HTML-Zusammenfassungstabelle für die Onboarding-E-Mail
-  onboarding.py          Hauptablauf (Orchestrierung aller Schritte)
-main.py                  Einstiegspunkt (python main.py)
+  job_title_resolver.py  Geschlechtsspezifische Stellenbezeichnung (Onboarding)
+  ou_resolver.py         Stellenbezeichnung → AD Organisationseinheit (Onboarding)
+  group_resolver.py      Ermittlung der AD-Gruppenmitgliedschaften (Onboarding)
+  email_builder.py       HTML-Zusammenfassungstabellen (Onboarding & Offboarding)
+  onboarding.py          Onboarding-Ablauf (Orchestrierung)
+  offboarding.py         Offboarding-Ablauf (Orchestrierung) 
+main.py                  Einstiegspunkt (python main.py [onboarding|offboarding])
+run-onboarding.bat       Batch-Script für geplantes Onboarding-Task
+run-offboarding.bat      Batch-Script für geplantes Offboarding-Task
 .env.example             Vorlage für die Konfiguration
 .env                     Tatsächliche Konfiguration (nicht im Git!)
+.gitignore               Git-Ausschlüsse (logs/, .env, etc.)
 pyproject.toml           Python-Projektdefinition und Abhängigkeiten
+logs/                    Automatisch erstellte Log-Dateien (nicht im Git)
 ```
 
 ---

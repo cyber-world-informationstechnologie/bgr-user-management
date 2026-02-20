@@ -321,3 +321,174 @@ def reconcile_user(
     failed_groups = add_to_groups(user, groups)
     create_profile_folder(user)
     return failed_groups
+
+def disable_user_account(abbreviation: str) -> None:
+    """Disable an AD user account."""
+    script = f"""
+$user = Get-ADUser -Filter {{ SamAccountName -eq '{_escape(abbreviation)}' }}
+if (-not $user) {{
+    Write-Error 'User {_escape(abbreviation)} not found in AD'
+    exit 1
+}}
+
+Disable-ADAccount -Identity $user -Confirm:$false
+Write-Output "User {_escape(abbreviation)} has been disabled"
+"""
+    _run_ps(script, description=f"Disable-ADAccount {abbreviation}")
+    logger.info("Disabled AD account for %s", abbreviation)
+
+
+def move_user_to_ou(abbreviation: str, target_ou: str) -> None:
+    """Move a user to a different Organizational Unit (e.g., Disabled Users OU)."""
+    script = f"""
+$user = Get-ADUser -Filter {{ SamAccountName -eq '{_escape(abbreviation)}' }}
+if (-not $user) {{
+    Write-Error 'User {_escape(abbreviation)} not found in AD'
+    exit 1
+}}
+
+$targetOU = '{_escape(target_ou)}'
+try {{
+    Move-ADObject -Identity $user.DistinguishedName -TargetPath $targetOU -Confirm:$false
+    Write-Output "User moved to: $targetOU"
+}} catch {{
+    Write-Error "Failed to move user: $_"
+    exit 1
+}}
+"""
+    _run_ps(script, description=f"Move-ADObject {abbreviation} to {target_ou}")
+    logger.info("Moved user %s to %s", abbreviation, target_ou)
+
+
+def remove_user_from_all_groups(abbreviation: str) -> None:
+    """Remove user from all AD groups except Domain Users.
+
+    Domain Users is a special group that all AD users belong to and cannot be removed.
+    """
+    script = f"""
+$user = Get-ADUser -Filter {{ SamAccountName -eq '{_escape(abbreviation)}' }}
+if (-not $user) {{
+    Write-Error 'User {_escape(abbreviation)} not found in AD'
+    exit 1
+}}
+
+# Get all groups the user is a member of
+$groups = Get-ADPrincipalGroupMembership -Identity $user | Where-Object {{ $_.Name -ne 'Domain Users' }}
+
+if ($groups) {{
+    foreach ($group in $groups) {{
+        try {{
+            Remove-ADGroupMember -Identity $group.DistinguishedName -Members $user -Confirm:$false
+            Write-Output "Removed from group: $($group.Name)"
+        }} catch {{
+            Write-Warning "Failed to remove from group $($group.Name): $_"
+        }}
+    }}
+}} else {{
+    Write-Output 'User is only a member of Domain Users (no removal needed)'
+}}
+"""
+    _run_ps(script, description=f"Remove-ADGroupMember all groups {abbreviation}")
+    logger.info("Removed user %s from all groups (except Domain Users)", abbreviation)
+def convert_mailbox_to_shared(email: str) -> None:
+    """Convert a user mailbox to a shared mailbox.
+
+    This allows team members to access the mailbox without needing the original password.
+    """
+    script = f"""
+Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue
+
+$mailbox = Get-Mailbox -Identity '{_escape(email)}' -ErrorAction SilentlyContinue
+if (-not $mailbox) {{
+    Write-Warning 'Mailbox {_escape(email)} not found'
+    exit 1
+}}
+
+# Convert to shared mailbox
+Set-Mailbox -Identity '{_escape(email)}' -Type Shared -Verbose
+Write-Output "Mailbox converted to Shared: {_escape(email)}"
+"""
+    _run_ps(script, description=f"Convert mailbox to shared {email}")
+    logger.info("Converted mailbox %s to shared", email)
+
+
+def setup_mailbox_forwarding(email: str, forward_to: str) -> None:
+    """Set up automatic email forwarding to another mailbox.
+
+    Emails will be forwarded AND delivered to the original mailbox (DeliverToMailboxAndForward).
+    """
+    script = f"""
+Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue
+
+$mailbox = Get-Mailbox -Identity '{_escape(email)}' -ErrorAction SilentlyContinue
+if (-not $mailbox) {{
+    Write-Warning 'Mailbox {_escape(email)} not found'
+    exit 1
+}}
+
+# Set forwarding address (with copy to original mailbox)
+Set-Mailbox -Identity '{_escape(email)}' 
+    -ForwardingAddress '{_escape(forward_to)}' 
+    -DeliverToMailboxAndForward $true 
+    -Verbose
+
+Write-Output "Forwarding set: {_escape(email)} -> {_escape(forward_to)} (with copy to original)"
+"""
+    _run_ps(script, description=f"Setup forwarding {email} to {forward_to}")
+    logger.info("Set up forwarding from %s to %s", email, forward_to)
+
+
+def set_mailbox_autoreply(email: str, message: str) -> None:
+    """Set up automatic reply (out-of-office) with no end date.
+
+    The message is used for both internal and external recipients.
+    """
+    script = f"""
+Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue
+
+$mailbox = Get-Mailbox -Identity '{_escape(email)}' -ErrorAction SilentlyContinue
+if (-not $mailbox) {{
+    Write-Warning 'Mailbox {_escape(email)} not found'
+    exit 1
+}}
+
+# Set auto-reply (out-of-office) with no end date
+Set-MailboxAutoReplyConfiguration -Identity '{_escape(email)}' 
+    -AutoReplyState Enabled 
+    -InternalMessage '{_escape(message)}' 
+    -ExternalMessage '{_escape(message)}' 
+    -Verbose
+
+Write-Output "Auto-reply configured for: {_escape(email)}"
+"""
+    _run_ps(script, description=f"Set autoreply for {email}")
+    logger.info("Set up out-of-office auto-reply for %s", email)
+
+
+def remove_from_distribution_groups(email: str) -> None:
+    """Remove a user from all distribution groups and mail-enabled security groups.
+
+    This prevents emails to those groups from being delivered to the former user's mailbox.
+    """
+    script = f"""
+Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue
+
+# Get all distribution groups
+$allGroups = Get-DistributionGroup -ResultSize Unlimited
+
+foreach ($group in $allGroups) {{
+    try {{
+        $members = Get-DistributionGroupMember -Identity $group.DistinguishedName -ResultSize Unlimited
+        if ($members | Where-Object {{ $_.PrimarySmtpAddress -eq '{_escape(email)}' }}) {{
+            Remove-DistributionGroupMember -Identity $group.DistinguishedName -Member '{_escape(email)}' -Confirm:$false -ErrorAction SilentlyContinue
+            Write-Output "Removed from distribution group: $($group.Name)"
+        }}
+    }} catch {{
+        Write-Warning "Failed to check/remove from group $($group.Name): $_"
+    }}
+}}
+
+Write-Output "Distribution group removal completed for: {_escape(email)}"
+"""
+    _run_ps(script, description=f"Remove from distribution groups {email}")
+    logger.info("Removed user %s from all distribution groups", email)

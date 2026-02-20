@@ -120,3 +120,101 @@ class OnboardingUser:
         """Extract the last 3 digits from the phone number as the extension (DW)."""
         digits = "".join(c for c in self.phone if c.isdigit())
         return digits[-3:] if len(digits) >= 3 else digits
+
+@dataclass
+class OffboardingUser:
+    """Represents a user to be offboarded, built from LOGA data.
+
+    Uses the same data structure as OnboardingUser, but focuses on
+    exit_date (= last work date) for offboarding operations.
+
+    LOGA data array indices:
+        0  = PNR (personnel number)
+        1  = Kürzel (abbreviation)
+        2  = Title prefix (e.g. Mag., Dr.)
+        3  = First name
+        4  = Last name
+        5  = Title suffix (e.g. LL.M.)
+        6  = Begin date
+        7  = End date (contract end)
+        8  = Room
+        9  = Birth date
+        10 = Gender (M / W)
+        11 = Mobile
+        12 = Email
+        13 = Phone
+        14 = Kostenstelle
+        15 = Stundensatz
+        16 = Berufsträger
+        17 = Team
+        18 = UmfBesetz (FTE)
+        19 = Position / Job title
+        20 = Exit date (Letzter Arbeitstag) — the key field for offboarding
+    """
+
+    pnr: str
+    abbreviation: str
+    title_pre: str
+    first_name: str
+    last_name: str
+    title_post: str
+    begin_date: str
+    end_date: str  # Contract end
+    exit_date: str  # Last work date (Letzter Arbeitstag) — used for offboarding
+    room: str
+    birth_date: str
+    gender: str
+    mobile: str
+    email: str
+    phone: str
+    kostenstelle: str
+    stundensatz: str
+    berufstraeger: str
+    team: str
+    umf_besetz: str
+    position: str
+
+    @classmethod
+    def from_loga_row(cls, row: list[str]) -> "OffboardingUser":
+        """Create an OffboardingUser from LOGA data row."""
+
+        def safe_get(index: int) -> str:
+            if index < len(row):
+                return (row[index] or "").strip()
+            return ""
+
+        return cls(
+            pnr=safe_get(0),
+            abbreviation=safe_get(1),
+            title_pre=safe_get(2),
+            first_name=safe_get(3),
+            last_name=safe_get(4),
+            title_post=safe_get(5),
+            begin_date=safe_get(6),
+            end_date=safe_get(7),
+            exit_date=safe_get(20),  # Last work date
+            room=safe_get(8),
+            birth_date=safe_get(9),
+            gender=safe_get(10),
+            mobile=safe_get(11),
+            email=safe_get(12),
+            phone=safe_get(13),
+            kostenstelle=safe_get(14),
+            stundensatz=safe_get(15),
+            berufstraeger=safe_get(16),
+            team=safe_get(17),
+            umf_besetz=safe_get(18),
+            position=safe_get(19),
+        )
+
+    @property
+    def full_display_name(self) -> str:
+        parts = [self.title_pre, self.first_name, self.last_name, self.title_post]
+        return " ".join(p for p in parts if p)
+
+    @property
+    def manager_abbreviation(self) -> str | None:
+        """Extract manager abbreviation from team field (last 3 chars)."""
+        if self.team and len(self.team) >= 3:
+            return self.team[-3:]
+        return None
