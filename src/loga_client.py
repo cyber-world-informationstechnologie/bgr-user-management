@@ -23,7 +23,7 @@ def fetch_new_users() -> list[OnboardingUser]:
         headers={"Content-Type": "application/json"},
         json={
             "jobFileContent": settings.loga_onboarding_job_file_content,
-            "locale": "de_DE",
+            "outputFormat": "CSV",
         },
         timeout=120,
     )
@@ -62,8 +62,7 @@ def fetch_exiting_users() -> list[OffboardingUser]:
         headers={"Content-Type": "application/json"},
         json={
             "jobFileContent": settings.loga_offboarding_job_file_content,
-            "locale": "de_DE",
-            "outputFormat": "csv",
+            "outputFormat": "CSV",
         },
         timeout=120,
     )
