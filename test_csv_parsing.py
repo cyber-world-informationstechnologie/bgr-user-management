@@ -76,4 +76,3 @@ for i, row in enumerate(rows):
         print(f"  ✗ Error: {e}")
 
 
-
