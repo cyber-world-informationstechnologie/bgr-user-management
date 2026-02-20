@@ -28,7 +28,8 @@ from src.smtp_client import send_email
 
 logger = logging.getLogger(__name__)
 
-# File to track which offboarding emails have been sent
+# Files to track offboarding progress
+NOTIFICATION_SENT_FILE = Path("logs") / "offboarding_notifications_sent.json"
 OFFBOARDED_USERS_FILE = Path("logs") / "offboarded_users.json"
 
 
@@ -44,10 +45,32 @@ def _get_manager_email(user: OffboardingUser) -> str | None:
     return None
 
 
+def _load_notifications_sent() -> dict:
+    """Load users who have already received notification emails (exit_date = today)."""
+    if not NOTIFICATION_SENT_FILE.exists():
+        return {}
+    try:
+        with open(NOTIFICATION_SENT_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError) as e:
+        logger.warning("Could not load notifications sent file: %s", e)
+        return {}
+
+
+def _save_notifications_sent(users: dict) -> None:
+    """Save users who have received notification emails."""
+    NOTIFICATION_SENT_FILE.parent.mkdir(exist_ok=True)
+    try:
+        with open(NOTIFICATION_SENT_FILE, "w", encoding="utf-8") as f:
+            json.dump(users, f, indent=2)
+    except IOError as e:
+        logger.error("Could not save notifications sent file: %s", e)
+
+
 def _load_offboarded_users() -> dict:
-    """Load the set of users who have already received offboarding emails.
+    """Load the set of users who have completed offboarding operations (exit_date = yesterday).
     
-    Returns a dict mapping email -> timestamp of when the email was sent.
+    Returns a dict mapping email -> timestamp of when offboarding was completed.
     """
     if not OFFBOARDED_USERS_FILE.exists():
         return {}
@@ -61,7 +84,7 @@ def _load_offboarded_users() -> dict:
 
 
 def _save_offboarded_users(users: dict) -> None:
-    """Save the set of users who have received offboarding emails."""
+    """Save the set of users who have completed offboarding operations."""
     OFFBOARDED_USERS_FILE.parent.mkdir(exist_ok=True)
     try:
         with open(OFFBOARDED_USERS_FILE, "w", encoding="utf-8") as f:
@@ -70,17 +93,28 @@ def _save_offboarded_users(users: dict) -> None:
         logger.error("Could not save offboarded users file: %s", e)
 
 
+def _mark_notification_sent(email: str) -> None:
+    """Record that a notification email was sent for this user."""
+    users = _load_notifications_sent()
+    users[email] = datetime.now().isoformat()
+    _save_notifications_sent(users)
+
+
+def _has_notification_been_sent(email: str) -> bool:
+    """Check if a notification email has already been sent for this user."""
+    return email in _load_notifications_sent()
+
+
 def _mark_user_as_offboarded(email: str) -> None:
-    """Record that an offboarding email was sent for this user."""
+    """Record that offboarding operations were completed for this user."""
     users = _load_offboarded_users()
     users[email] = datetime.now().isoformat()
     _save_offboarded_users(users)
 
 
-def _has_offboarding_email_been_sent(email: str) -> bool:
-    """Check if an offboarding email has already been sent for this user."""
-    users = _load_offboarded_users()
-    return email in users
+def _has_offboarding_been_completed(email: str) -> bool:
+    """Check if offboarding operations have been completed for this user."""
+    return email in _load_offboarded_users()
 
 
 def _process_user(user: OffboardingUser) -> OffboardingEmailRow | None:
@@ -155,68 +189,144 @@ def _process_user(user: OffboardingUser) -> OffboardingEmailRow | None:
 
 
 def run_offboarding(resend: bool = False) -> None:
-    """Execute the full offboarding flow.
+    """Execute the full offboarding flow in two phases.
 
-    1. Fetch exiting users from LOGA HR system whose exit_date is today - 1 (yesterday)
-    2. For each exiting user:
-       a. Convert Exchange mailbox to shared mailbox
-       b. Set auto-reply / out-of-office notice (no end date)
-       c. Set up mail forwarding to manager (with copy to original mailbox)
-       d. Remove from all email distribution groups
-       e. Disable AD account
-       f. Move to 'Disabled Users' OU
-       g. Remove group memberships (except Domain Users)
-    3. Send summary email to stakeholders (only once per user, unless resend=True)
+    **Phase 1 (Day exit_date appears in P&I):** Send notification emails
+    - Fetch exiting users whose exit_date is TODAY
+    - Send notification email that user is leaving (tracked to send only once)
+    
+    **Phase 2 (Day after exit_date):** Execute offboarding operations
+    - Fetch exiting users whose exit_date was YESTERDAY
+    - Convert Exchange mailbox to shared mailbox
+    - Set auto-reply / out-of-office notice (no end date)
+    - Set up mail forwarding to manager (with copy to original mailbox)
+    - Remove from all email distribution groups
+    - Disable AD account and move to 'Disabled Users' OU
+    - Remove group memberships (except Domain Users)
+    - Track completion to avoid re-running
     
     Args:
-        resend: If True, resend emails even for users who have already been offboarded
+        resend: If True, resend notifications/operations even if already completed
     """
     logger.info("Starting offboarding process…")
     if resend:
-        logger.info("RESEND MODE: Will re-process users even if emails were already sent")
+        logger.info("RESEND MODE: Will re-process users")
 
     users = fetch_exiting_users()
     logger.info("Fetched %d potentially exiting users", len(users))
 
-    # Filter to only users whose exit_date was yesterday (one day ago)
+    # Phase 1: Send notification emails for users appearing today (exit_date = today)
+    today = datetime.now().strftime("%d.%m.%Y")
+    notified_users = [u for u in users if u.exit_date == today]
+    
+    if notified_users:
+        logger.info("Phase 1: Sending notifications for %d users with exit_date = %s", len(notified_users), today)
+        _send_notification_emails(notified_users, resend)
+    else:
+        logger.info("Phase 1: No users to notify today (looking for exit_date=%s)", today)
+
+    # Phase 2: Execute offboarding operations for users exiting yesterday
     yesterday = (datetime.now() - timedelta(days=1)).strftime("%d.%m.%Y")
-    exiting_today = [u for u in users if u.exit_date == yesterday]
+    offboarding_users = [u for u in users if u.exit_date == yesterday]
+    
+    if offboarding_users:
+        logger.info("Phase 2: Executing offboarding for %d users with exit_date = %s", len(offboarding_users), yesterday)
+        _execute_offboarding_operations(offboarding_users, resend)
+    else:
+        logger.info("Phase 2: No users to offboard today (looking for exit_date=%s)", yesterday)
 
-    if not exiting_today:
-        logger.info("No users to offboard today (looking for exit_date=%s)", yesterday)
-        return
+    logger.info("Offboarding process completed")
 
-    logger.info("Processing %d users for offboarding (exit_date = %s)", len(exiting_today), yesterday)
 
-    # Filter out users who have already received offboarding emails (unless resend=True)
+def _send_notification_emails(users: list[OffboardingUser], resend: bool = False) -> None:
+    """Phase 1: Send notification emails when users first appear in P&I report.
+    
+    Args:
+        users: List of users with exit_date = today
+        resend: If True, resend even if already notified
+    """
+    # Filter out users who have already been notified (unless resend=True)
     if not resend:
-        already_offboarded = [u for u in exiting_today if _has_offboarding_email_been_sent(u.email)]
+        already_notified = [u for u in users if _has_notification_been_sent(u.email)]
+        if already_notified:
+            logger.info(
+                "Skipping %d users who have already received notifications: %s",
+                len(already_notified),
+                ", ".join(u.email for u in already_notified),
+            )
+        users = [u for u in users if not _has_notification_been_sent(u.email)]
+        
+        if not users:
+            logger.info("Phase 1: No new users to notify")
+            return
+
+    # Build notification email with list of users leaving today
+    try:
+        email_rows: list[OffboardingEmailRow] = []
+        for user in users:
+            row = OffboardingEmailRow(
+                email=user.email,
+                full_name=user.full_display_name,
+                last_work_day=user.exit_date,
+                status="Benachrichtigung versendet",
+            )
+            email_rows.append(row)
+
+        html_body = build_offboarding_email(email_rows)
+        bcc = [addr.strip() for addr in settings.offboarding_notification_email_bcc.split(",") if addr.strip()]
+        send_email(
+            subject=f"Austrittsmitteilung — {len(users)} Benutzer",
+            html_body=html_body,
+            to_recipients=[settings.offboarding_notification_email_to],
+            bcc_recipients=bcc or None,
+            from_address=settings.offboarding_notification_email_from,
+        )
+        logger.info("Notification email sent for %d users", len(users))
+        
+        # Mark all users as notified
+        for user in users:
+            _mark_notification_sent(user.email)
+        logger.info("Marked %d users as notified", len(users))
+    except Exception:
+        logger.exception("Failed to send notification emails")
+
+
+def _execute_offboarding_operations(users: list[OffboardingUser], resend: bool = False) -> None:
+    """Phase 2: Execute offboarding operations the day after exit_date.
+    
+    Args:
+        users: List of users with exit_date = yesterday
+        resend: If True, re-execute even if already completed
+    """
+    # Filter out users who have already completed offboarding (unless resend=True)
+    if not resend:
+        already_offboarded = [u for u in users if _has_offboarding_been_completed(u.email)]
         if already_offboarded:
             logger.info(
-                "Skipping %d users who have already received offboarding emails: %s",
+                "Skipping %d users who have already completed offboarding: %s",
                 len(already_offboarded),
                 ", ".join(u.email for u in already_offboarded),
             )
-        exiting_today = [u for u in exiting_today if not _has_offboarding_email_been_sent(u.email)]
+        users = [u for u in users if not _has_offboarding_been_completed(u.email)]
         
-        if not exiting_today:
-            logger.info("No new users to offboard (all have already been processed)")
+        if not users:
+            logger.info("Phase 2: No new users to offboard")
             return
 
-    # Process each user and collect email rows
+    # Process each user and collect results
     email_rows: list[OffboardingEmailRow] = []
-    for user in exiting_today:
+    for user in users:
         row = _process_user(user)
         if row:
             email_rows.append(row)
 
-    # Send summary email and mark users as offboarded
+    # Send summary email with operations completed
     if email_rows:
         try:
             html_body = build_offboarding_email(email_rows)
             bcc = [addr.strip() for addr in settings.offboarding_notification_email_bcc.split(",") if addr.strip()]
             send_email(
-                subject=f"Offboarding Summary — {len(email_rows)} Benutzer verarbeitet",
+                subject=f"Offboarding abgeschlossen — {len(email_rows)} Benutzer verarbeitet",
                 html_body=html_body,
                 to_recipients=[settings.offboarding_notification_email_to],
                 bcc_recipients=bcc or None,
@@ -227,9 +337,7 @@ def run_offboarding(resend: bool = False) -> None:
             # Mark all successfully processed users as offboarded
             for row in email_rows:
                 _mark_user_as_offboarded(row.email)
-            logger.info("Marked %d users as offboarded in tracking file", len(email_rows))
+            logger.info("Marked %d users as offboarded", len(email_rows))
         except Exception:
             logger.exception("Failed to send summary email")
-
-    logger.info("Offboarding process completed")
 
