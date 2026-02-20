@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # On-premise AD / Exchange
     profile_base_path: str = r"\\bgr\dfs\Profile"
     default_password: str = "Onboarding13IT!"
+    remote_routing_domain: str = "bindergroesswang-at.mail.onmicrosoft.com"
 
     # Dry run
     dry_run: bool = True

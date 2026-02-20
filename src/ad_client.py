@@ -1,7 +1,7 @@
 """On-premise Active Directory & Exchange user provisioning via PowerShell.
 
-Runs directly on the Exchange server — uses New-Mailbox (not New-RemoteMailbox)
-and native AD cmdlets via subprocess.
+Runs on the Exchange server — uses New-RemoteMailbox to create a remote mailbox
+(cloud-hosted) with an on-premise AD account, plus native AD cmdlets via subprocess.
 """
 
 import logging
@@ -65,18 +65,19 @@ def _run_ps(script: str, *, description: str) -> subprocess.CompletedProcess[str
 
 
 def create_mailbox(user: OnboardingUser, *, ou: str) -> None:
-    """Create an Exchange mailbox and AD account (runs locally on Exchange server).
+    """Create a remote mailbox (cloud-hosted) with an on-premise AD account.
 
-    This replaces New-RemoteMailbox — since we run directly on the Exchange server,
-    we use New-Mailbox instead.
+    Uses New-RemoteMailbox which creates the AD user and sets up mail-routing
+    to Exchange Online via the remote routing address.
     """
     abrev_upper = user.abbreviation.upper()
     display_name = f"{user.last_name}, {user.first_name}"
+    routing_address = f"{abrev_upper}@{settings.remote_routing_domain}"
 
     script = f"""
 Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue
 
-New-Mailbox `
+New-RemoteMailbox `
     -Password (ConvertTo-SecureString '{settings.default_password}' -AsPlainText -Force) `
     -Name '{_escape(display_name)}' `
     -DisplayName '{_escape(display_name)}' `
@@ -84,14 +85,15 @@ New-Mailbox `
     -LastName '{_escape(user.last_name)}' `
     -SamAccountName '{abrev_upper}' `
     -UserPrincipalName '{abrev_upper}@bgr.at' `
-    -OrganizationalUnit '{_escape(ou)}' `
+    -OnPremisesOrganizationalUnit '{_escape(ou)}' `
     -Initials '{abrev_upper}' `
     -PrimarySmtpAddress '{_escape(user.email)}' `
+    -RemoteRoutingAddress '{routing_address}' `
     -ResetPasswordOnNextLogon $true `
     -Verbose
 """
-    _run_ps(script, description=f"New-Mailbox {user.email}")
-    logger.info("Created mailbox for %s", user.email)
+    _run_ps(script, description=f"New-RemoteMailbox {user.email}")
+    logger.info("Created remote mailbox for %s", user.email)
 
 
 def set_ad_attributes(user: OnboardingUser, *, job_title: str) -> None:

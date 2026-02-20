@@ -19,7 +19,7 @@ Für jeden Benutzer wird per PowerShell im Active Directory geprüft, ob ein Kon
 ### 3. Benutzer anlegen (außer Reinigungskräfte)
 Für neue Benutzer, die **nicht** die Stelle „Mitarbeiter*in Reinigung" haben, werden folgende Schritte ausgeführt:
 
-- **Exchange-Postfach erstellen** — Über `New-Mailbox` wird direkt auf dem Exchange-Server ein Postfach und ein AD-Konto angelegt. Das Konto wird in die korrekte Organisationseinheit (OU) einsortiert, die sich aus der Stellenbezeichnung ergibt (z.B. Partner → `OU=Partner-in`, Sekretariat → `OU=Sekretariat`).
+- **Remote-Mailbox erstellen** — Über `New-RemoteMailbox` wird auf dem Exchange-Server ein AD-Konto erstellt, das auf ein Cloud-Postfach in Exchange Online geroutet wird (via `RemoteRoutingAddress` auf `*.mail.onmicrosoft.com`). Das Konto wird in die korrekte Organisationseinheit (OU) einsortiert, die sich aus der Stellenbezeichnung ergibt (z.B. Partner → `OU=Partner-in`, Sekretariat → `OU=Sekretariat`).
 
 - **AD-Attribute setzen** — Adresse, Telefon, Titel, Firma, IP-Telefon, Fax-Nummer, Title-Prefix/Suffix als Extension Attributes. Die Adresse wird automatisch anhand des Zimmers bestimmt (Zimmer beginnt mit „I" → Innsbruck, sonst Wien).
 
@@ -44,7 +44,7 @@ Das Skript muss auf einer Maschine laufen, die folgende Bedingungen erfüllt:
 
 | Voraussetzung | Details |
 |---|---|
-| **Exchange-Server** | Das Skript verwendet `New-Mailbox` (lokale Postfach-Erstellung). Es muss auf dem Exchange-Server selbst oder einer Maschine mit Exchange Management Shell laufen. |
+| **Exchange-Server** | Das Skript verwendet `New-RemoteMailbox` (erstellt AD-Konto + Remote-Routing zu Exchange Online). Es muss auf dem Exchange-Server selbst oder einer Maschine mit Exchange Management Shell laufen. |
 | **AD PowerShell-Modul** | Muss installiert sein: `Install-WindowsFeature RSAT-AD-PowerShell` |
 | **Exchange PowerShell Snap-In** | Wird im Skript automatisch geladen (`Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn`) |
 | **SMTP-Connector** | Die IP-Adresse des Servers muss auf dem Connector `bindergroesswang-at.mail.protection.outlook.com` gewhitelistet sein (Port 25, ohne Auth) |
@@ -108,6 +108,7 @@ LOGA_JOB_FILE_CONTENT=<Wert von Markus erfragen>
 | `ERROR_NOTIFICATION_EMAIL` | Empfänger bei Fehlern |
 | `PROFILE_BASE_PATH` | UNC-Pfad zum Profilordner-Share |
 | `DEFAULT_PASSWORD` | Standardpasswort für neue Postfächer |
+| `REMOTE_ROUTING_DOMAIN` | Remote-Routing-Domain für Exchange Online (z.B. `bindergroesswang-at.mail.onmicrosoft.com`) |
 | `DRY_RUN` | `true` = nur loggen, nichts ändern; `false` = produktiv ausführen |
 
 ### 5. Testlauf (Dry Run)
@@ -194,7 +195,7 @@ pyproject.toml           Python-Projektdefinition und Abhängigkeiten
 |---|---|
 | `ModuleNotFoundError: No module named 'src'` | Sicherstellen, dass `pip install -e .` im venv ausgeführt wurde |
 | `PowerShell-Fehler: Get-ADUser not recognized` | AD PowerShell-Modul installieren: `Install-WindowsFeature RSAT-AD-PowerShell` |
-| `New-Mailbox not recognized` | Exchange Snap-In nicht verfügbar — Skript muss auf dem Exchange-Server laufen |
+| `New-RemoteMailbox not recognized` | Exchange Snap-In nicht verfügbar — Skript muss auf dem Exchange-Server laufen |
 | `SMTP connection refused` | Server-IP nicht auf dem Connector gewhitelistet, oder Port 25 blockiert |
 | `LOGA API gibt leere Daten zurück` | `LOGA_JOB_FILE_CONTENT` in `.env` prüfen |
 | Benutzer wird übersprungen obwohl er neu ist | AD-Kürzel (SamAccountName) existiert bereits — manuell im AD prüfen |
