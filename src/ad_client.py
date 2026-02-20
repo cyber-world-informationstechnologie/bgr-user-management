@@ -4,6 +4,7 @@ Runs on the Exchange server — uses New-RemoteMailbox to create a remote mailbo
 (cloud-hosted) with an on-premise AD account, plus native AD cmdlets via subprocess.
 """
 
+import base64
 import logging
 import subprocess
 
@@ -11,6 +12,18 @@ from src.config import settings
 from src.models import OnboardingUser
 
 logger = logging.getLogger(__name__)
+
+# Prefix prepended to every PowerShell script so AD cmdlets are always available.
+_PS_PREAMBLE = "Import-Module ActiveDirectory -ErrorAction SilentlyContinue\n"
+
+
+def _encode_command(script: str) -> str:
+    """Encode a PowerShell script as base64 UTF-16LE for -EncodedCommand.
+
+    This avoids all code-page / encoding issues with special characters
+    (ö, ä, ü, ß, …) that break when passed via -Command on Windows.
+    """
+    return base64.b64encode(script.encode("utf-16-le")).decode("ascii")
 
 
 def _escape(value: str) -> str:
@@ -23,11 +36,12 @@ def user_exists_in_ad(abbreviation: str) -> bool:
     if not abbreviation:
         return False
 
+    script = (
+        _PS_PREAMBLE
+        + f"if (Get-ADUser -Filter {{SamAccountName -eq '{_escape(abbreviation)}'}}) {{ 'FOUND' }} else {{ 'NOTFOUND' }}"
+    )
     result = subprocess.run(
-        [
-            "powershell", "-NoProfile", "-NonInteractive", "-Command",
-            f"if (Get-ADUser -Filter {{SamAccountName -eq '{_escape(abbreviation)}'}}) {{ 'FOUND' }} else {{ 'NOTFOUND' }}",
-        ],
+        ["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", _encode_command(script)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -36,15 +50,21 @@ def user_exists_in_ad(abbreviation: str) -> bool:
 
 
 def _run_ps(script: str, *, description: str) -> subprocess.CompletedProcess[str]:
-    """Execute a PowerShell script block and return the result."""
-    logger.debug("Running PowerShell [%s]:\n%s", description, script)
+    """Execute a PowerShell script block and return the result.
+
+    Automatically prepends ``Import-Module ActiveDirectory`` and uses
+    ``-EncodedCommand`` (base64 UTF-16LE) to avoid code-page issues with
+    special characters like ö, ä, ü.
+    """
+    full_script = _PS_PREAMBLE + script
+    logger.debug("Running PowerShell [%s]:\n%s", description, full_script)
 
     if settings.dry_run:
-        logger.info("[DRY RUN] Would run PowerShell [%s]:\n%s", description, script)
+        logger.info("[DRY RUN] Would run PowerShell [%s]:\n%s", description, full_script)
         return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
 
     result = subprocess.run(
-        ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+        ["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", _encode_command(full_script)],
         capture_output=True,
         text=True,
         timeout=120,
