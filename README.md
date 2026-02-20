@@ -14,7 +14,10 @@ Der Ablauf besteht aus vier Hauptschritten:
 Das Skript ruft die **LOGA HR-Schnittstelle** (P&I Scout API) auf und erhält eine Liste aller bevorstehenden Eintritte. Die Daten kommen als JSON-Array, wobei jeder Eintrag 20 Felder enthält (Personalnummer, Name, Titel, Kürzel, Zimmer, Team, Stellenbezeichnung, usw.).
 
 ### 2. Prüfen, ob der Benutzer bereits existiert
-Für jeden Benutzer wird per PowerShell im Active Directory geprüft, ob ein Konto mit dem Kürzel (SamAccountName) bereits vorhanden ist. Falls ja, wird der Benutzer übersprungen.
+Für jeden Benutzer wird per PowerShell im Active Directory geprüft, ob ein Konto mit dem Kürzel (SamAccountName) bereits vorhanden ist.
+
+- **Neuer Benutzer** → Vollständige Provisionierung (Postfach + Attribute + Gruppen + Profilordner)
+- **Bereits vorhandener Benutzer** → **Abgleich (Reconcile):** Die Postfach-Erstellung wird übersprungen, aber AD-Attribute, Gruppen und Profilordner werden erneut gesetzt. Dadurch werden fehlende oder fehlerhafte Werte automatisch korrigiert. Alle Operationen sind idempotent — ein wiederholter Lauf auf einem vollständig provisionierten Benutzer ist sicher und ändert nichts Ungewolltes.
 
 ### 3. Benutzer anlegen (außer Reinigungskräfte)
 Für neue Benutzer, die **nicht** die Stelle „Mitarbeiter*in Reinigung" haben, werden folgende Schritte ausgeführt:
@@ -199,3 +202,5 @@ pyproject.toml           Python-Projektdefinition und Abhängigkeiten
 | `SMTP connection refused` | Server-IP nicht auf dem Connector gewhitelistet, oder Port 25 blockiert |
 | `LOGA API gibt leere Daten zurück` | `LOGA_JOB_FILE_CONTENT` in `.env` prüfen |
 | Benutzer wird übersprungen obwohl er neu ist | AD-Kürzel (SamAccountName) existiert bereits — manuell im AD prüfen |
+| Nach Fehler erneut ausführen: Postfach existiert schon | Das ist normal — das Skript erkennt den Benutzer als „vorhanden" und führt nur den Abgleich durch (Attribute, Gruppen, Profilordner) |
+| `git pull` schlägt fehl mit „unrelated histories" | `git fetch origin` dann `git reset --hard origin/main` — danach ist das lokale Repo synchron |
