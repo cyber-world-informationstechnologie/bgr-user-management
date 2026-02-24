@@ -106,6 +106,13 @@ class OnboardingUser:
         return self.position == "Mitarbeiter*in Reinigung"
 
     @property
+    def address(self) -> Address:
+        """Return the office address based on room location (I* = Innsbruck, else Vienna)."""
+        if self.room and self.room.startswith("I"):
+            return ADDRESS_INNSBRUCK
+        return ADDRESS_VIENNA
+
+    @property
     def phone_extension(self) -> str:
         """Extract the last 3 digits from the phone number as the extension (DW)."""
         digits = "".join(c for c in self.phone if c.isdigit())
