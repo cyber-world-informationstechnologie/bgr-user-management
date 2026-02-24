@@ -292,12 +292,24 @@ def provision_user(
     job_title: str,
     ou: str,
     groups: list[str],
+    ad_replication_wait: int = 10,
 ) -> list[str]:
     """Full on-premise provisioning: mailbox → AD attributes → groups → profile folder.
 
+    After creating the mailbox, waits *ad_replication_wait* seconds for the
+    new AD object to become visible before setting attributes.
+
     Returns list of groups that failed to be assigned.
     """
+    import time
+
     create_mailbox(user, ou=ou)
+
+    # Wait for AD replication so the new user object is queryable
+    if not settings.dry_run:
+        logger.info("Waiting %ds for AD replication before setting attributes…", ad_replication_wait)
+        time.sleep(ad_replication_wait)
+
     set_ad_attributes(user, job_title=job_title)
     failed_groups = add_to_groups(user, groups)
     create_profile_folder(user)

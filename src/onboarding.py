@@ -126,7 +126,11 @@ def run_onboarding() -> None:
         # Check if user already exists in AD
         exists = user_exists_in_ad(user.abbreviation)
         if exists:
-            logger.info("User %s already exists in AD — will reconcile attributes", user.abbreviation)
+            if settings.reconcile_existing:
+                logger.info("User %s already exists in AD — reconcile flag is set, will update attributes", user.abbreviation)
+            else:
+                logger.info("User %s already exists in AD — skipping (set RECONCILE_EXISTING=true to update)", user.abbreviation)
+                continue
 
         row = _process_user(user, exists=exists)
         if row:

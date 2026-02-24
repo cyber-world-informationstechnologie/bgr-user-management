@@ -41,8 +41,9 @@ class Settings(BaseSettings):
     default_password: str = "Onboarding13IT!"
     remote_routing_domain: str = "bindergroesswang-at.mail.onmicrosoft.com"
 
-    # ========== Dry Run Mode ==========
+    # ========== Behavior Flags ==========
     dry_run: bool = True
+    reconcile_existing: bool = False  # Re-apply AD attributes for users that already exist
 
 
 settings = Settings()
