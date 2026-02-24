@@ -160,6 +160,7 @@ def _process_user(user: OffboardingUser) -> OffboardingEmailRow | None:
 
         return OffboardingEmailRow(
             exit_date=user.exit_date,
+            end_date=user.end_date,
             full_name=user.full_display_name,
             email=user.email,
             abbreviation=user.abbreviation,
@@ -168,6 +169,9 @@ def _process_user(user: OffboardingUser) -> OffboardingEmailRow | None:
             team=user.team,
             birth_date=user.birth_date,
             kostenstelle=user.kostenstelle,
+            berufstraeger=user.berufstraeger,
+            fte=user.umf_besetz,
+            kommentar=user.kommentar,
         )
 
     except Exception:
@@ -269,6 +273,7 @@ def _send_notification_on_new_users(users: list[OffboardingUser], resend: bool =
         for user in new_users:
             row = OffboardingEmailRow(
                 exit_date=user.exit_date,
+                end_date=user.end_date,
                 full_name=user.full_display_name,
                 email=user.email,
                 abbreviation=user.abbreviation,
@@ -277,6 +282,9 @@ def _send_notification_on_new_users(users: list[OffboardingUser], resend: bool =
                 team=user.team,
                 birth_date=user.birth_date,
                 kostenstelle=user.kostenstelle,
+                berufstraeger=user.berufstraeger,
+                fte=user.umf_besetz,
+                kommentar=user.kommentar,
             )
             email_rows.append(row)
 

@@ -4,10 +4,10 @@
 from src.models import OffboardingUser
 
 # Test data (with multi-line rows)
-csv_data = """Kürzel;Titel;Vorname;Nachname;Titel nach dem Namen;Vertragsbeginn;Vertragsende;Zimmer;Geburtsdatum;Handy;E-Mail;Telefon;Kostenstelle;Stundensatz;Berufsträger;Team;FTE;Stellenbezeichnung;Letzter Arbeitstag
-SHO;Mag.;Sung-Hyek;Hong;;05.12.2022;28.02.2026;609/1;06.09.1996;+43 664 80 534 449;hong@bindergroesswang.at;+43 1 534 80 449;210024;;Ja;Partner*in FKH;1,00000;Rechtsanwaltsanwärter*in;13.02.2026
+csv_data = """Kürzel;Titel;Vorname;Nachname;Titel nach dem Namen;Vertragsbeginn;Vertragsende;Zimmer;Geburtsdatum;Handy;E-Mail;Telefon;Kostenstelle;Stundensatz;Berufsträger;Team;FTE;Stellenbezeichnung;Letzter Arbeitstag;Kommentar
+SHO;Mag.;Sung-Hyek;Hong;;05.12.2022;28.02.2026;609/1;06.09.1996;+43 664 80 534 449;hong@bindergroesswang.at;+43 1 534 80 449;210024;;Ja;Partner*in FKH;1,00000;Rechtsanwaltsanwärter*in;13.02.2026;Voraussichtlicher Wiedereintritt: 20.04.2026
 C38;;Anna;Zierler;;01.02.2026;28.02.2026;614/1;29.01.2004;;zierler@bindergroesswang.at;+43 1 534 80 343;240062
-;;Nein;Partner*in CWI;1,00000;Juristische*r Ferialpraktikant*in;25.02.2026"""
+;;Nein;Partner*in CWI;1,00000;Juristische*r Ferialpraktikant*in;25.02.2026;"""
 
 # Simulate the multi-line parsing
 lines = csv_data.strip().split('\n')
@@ -72,6 +72,7 @@ for i, row in enumerate(rows):
         print(f"    Berufsträger: {user.berufstraeger}")
         print(f"    Team: {user.team}")
         print(f"    Position: {user.position}")
+        print(f"    Kommentar: {user.kommentar}")
     except Exception as e:
         print(f"  ✗ Error: {e}")
 

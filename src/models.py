@@ -133,6 +133,7 @@ class OffboardingUser:
         16 = FTE (full-time equivalent)
         17 = Stellenbezeichnung (job title / position)
         18 = Letzter Arbeitstag (exit date / last work day)
+        19 = Kommentar (comment, e.g. expected re-entry)
     """
 
     abbreviation: str
@@ -154,6 +155,7 @@ class OffboardingUser:
     team: str
     umf_besetz: str  # FTE
     position: str
+    kommentar: str  # Comment (e.g. expected re-entry date)
 
     @classmethod
     def from_loga_row(cls, row: list[str]) -> "OffboardingUser":
@@ -184,6 +186,7 @@ class OffboardingUser:
             team=safe_get(15),
             umf_besetz=safe_get(16),
             position=safe_get(17),
+            kommentar=safe_get(19),
         )
 
     @property
