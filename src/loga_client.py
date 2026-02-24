@@ -43,7 +43,7 @@ def fetch_new_users() -> list[OnboardingUser]:
     # The API with outputFormat=CSV returns CSV directly (not JSON)
     content_type = response.headers.get("Content-Type", "").lower()
     
-    if "octet-stream" in content_type or response.text.startswith("Kürzel"):
+    if "octet-stream" in content_type or response.text.startswith(("Kürzel", "Personalnummer")):
         # Direct CSV response
         logger.debug("Parsing direct CSV response")
         return _parse_csv_response(response.text, OnboardingUser)
@@ -97,7 +97,7 @@ def fetch_exiting_users() -> list[OffboardingUser]:
     # The API with outputFormat=CSV returns CSV directly (not JSON)
     content_type = response.headers.get("Content-Type", "").lower()
     
-    if "octet-stream" in content_type or response.text.startswith("Kürzel"):
+    if "octet-stream" in content_type or response.text.startswith(("Kürzel", "Personalnummer")):
         # Direct CSV response
         logger.debug("Parsing direct CSV response")
         return _parse_csv_response(response.text, OffboardingUser)

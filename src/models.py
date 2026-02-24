@@ -23,26 +23,29 @@ class OnboardingUser:
     """Represents a user to be onboarded, built from LOGA data.
 
     LOGA CSV column indices (semicolon-delimited):
-        0  = Kürzel (abbreviation)
-        1  = Titel (title prefix, e.g. Mag., Dr.)
-        2  = Vorname (first name)
-        3  = Nachname (last name)
-        4  = Titel nach dem Namen (title suffix, e.g. LL.M.)
-        5  = Vertragsbeginn (contract start / begin date)
-        6  = Vertragsende (contract end)
-        7  = Zimmer (room)
-        8  = Geburtsdatum (birth date)
-        9  = Handy (mobile)
-        10 = E-Mail (email)
-        11 = Telefon (phone)
-        12 = Kostenstelle (cost center)
-        13 = Stundensatz (hourly rate)
-        14 = Berufsträger (professional carrier flag)
-        15 = Team (team)
-        16 = FTE (full-time equivalent)
-        17 = Stellenbezeichnung (job title / position)
+        0  = Personalnummer (personnel number / PNR)
+        1  = Kürzel (abbreviation)
+        2  = Titel (title prefix, e.g. Mag., Dr.)
+        3  = Vorname (first name)
+        4  = Nachname (last name)
+        5  = Titel nach dem Namen (title suffix, e.g. LL.M.)
+        6  = Vertragsbeginn (contract start / begin date)
+        7  = Vertragsende (contract end)
+        8  = Zimmer (room)
+        9  = Geburtsdatum (birth date)
+        10 = Geschlecht (gender, M/W)
+        11 = Handy (mobile)
+        12 = E-Mail (email)
+        13 = Telefon (phone)
+        14 = Kostenstelle (cost center)
+        15 = Stundensatz (hourly rate)
+        16 = Berufsträger (professional carrier flag)
+        17 = Team (team)
+        18 = FTE (full-time equivalent)
+        19 = Stellenbezeichnung (job title / position)
     """
 
+    personalnummer: str
     abbreviation: str
     title_pre: str
     first_name: str
@@ -52,6 +55,7 @@ class OnboardingUser:
     end_date: str
     room: str
     birth_date: str
+    geschlecht: str
     mobile: str
     email: str
     phone: str
@@ -66,7 +70,7 @@ class OnboardingUser:
     def from_loga_row(cls, row: list[str]) -> "OnboardingUser":
         """Create an OnboardingUser from a LOGA data row (array of strings).
         
-        Handles rows with 18-19 fields (tolerates trailing empty fields).
+        Handles rows with 20+ fields (tolerates trailing empty fields).
         """
 
         def safe_get(index: int) -> str:
@@ -75,24 +79,26 @@ class OnboardingUser:
             return ""
 
         return cls(
-            abbreviation=safe_get(0),
-            title_pre=safe_get(1),
-            first_name=safe_get(2),
-            last_name=safe_get(3),
-            title_post=safe_get(4),
-            begin_date=safe_get(5),
-            end_date=safe_get(6),
-            room=safe_get(7),
-            birth_date=safe_get(8),
-            mobile=safe_get(9),
-            email=safe_get(10),
-            phone=safe_get(11),
-            kostenstelle=safe_get(12),
-            stundensatz=safe_get(13),
-            berufstraeger=safe_get(14),
-            team=safe_get(15),
-            umf_besetz=safe_get(16),
-            position=safe_get(17),
+            personalnummer=safe_get(0),
+            abbreviation=safe_get(1),
+            title_pre=safe_get(2),
+            first_name=safe_get(3),
+            last_name=safe_get(4),
+            title_post=safe_get(5),
+            begin_date=safe_get(6),
+            end_date=safe_get(7),
+            room=safe_get(8),
+            birth_date=safe_get(9),
+            geschlecht=safe_get(10),
+            mobile=safe_get(11),
+            email=safe_get(12),
+            phone=safe_get(13),
+            kostenstelle=safe_get(14),
+            stundensatz=safe_get(15),
+            berufstraeger=safe_get(16),
+            team=safe_get(17),
+            umf_besetz=safe_get(18),
+            position=safe_get(19),
         )
 
     @property
@@ -126,28 +132,31 @@ class OffboardingUser:
     (Letzter Arbeitstag) for offboarding operations.
 
     LOGA CSV column indices (semicolon-delimited):
-        0  = Kürzel (abbreviation)
-        1  = Titel (title prefix, e.g. Mag., Dr.)
-        2  = Vorname (first name)
-        3  = Nachname (last name)
-        4  = Titel nach dem Namen (title suffix, e.g. LL.M.)
-        5  = Vertragsbeginn (contract start / begin date)
-        6  = Vertragsende (contract end)
-        7  = Zimmer (room)
-        8  = Geburtsdatum (birth date)
-        9  = Handy (mobile)
-        10 = E-Mail (email)
-        11 = Telefon (phone)
-        12 = Kostenstelle (cost center)
-        13 = Stundensatz (hourly rate)
-        14 = Berufsträger (professional carrier flag)
-        15 = Team (team)
-        16 = FTE (full-time equivalent)
-        17 = Stellenbezeichnung (job title / position)
-        18 = Letzter Arbeitstag (exit date / last work day)
-        19 = Kommentar (comment, e.g. expected re-entry)
+        0  = Personalnummer (personnel number / PNR)
+        1  = Kürzel (abbreviation)
+        2  = Titel (title prefix, e.g. Mag., Dr.)
+        3  = Vorname (first name)
+        4  = Nachname (last name)
+        5  = Titel nach dem Namen (title suffix, e.g. LL.M.)
+        6  = Vertragsbeginn (contract start / begin date)
+        7  = Vertragsende (contract end)
+        8  = Zimmer (room)
+        9  = Geburtsdatum (birth date)
+        10 = Geschlecht (gender, M/W)
+        11 = Handy (mobile)
+        12 = E-Mail (email)
+        13 = Telefon (phone)
+        14 = Kostenstelle (cost center)
+        15 = Stundensatz (hourly rate)
+        16 = Berufsträger (professional carrier flag)
+        17 = Team (team)
+        18 = FTE (full-time equivalent)
+        19 = Stellenbezeichnung (job title / position)
+        20 = Letzter Arbeitstag (exit date / last work day)
+        21 = Kommentar (comment, e.g. expected re-entry)
     """
 
+    personalnummer: str
     abbreviation: str
     title_pre: str
     first_name: str
@@ -158,6 +167,7 @@ class OffboardingUser:
     exit_date: str  # Last work date (Letzter Arbeitstag) — used for offboarding
     room: str
     birth_date: str
+    geschlecht: str
     mobile: str
     email: str
     phone: str
@@ -179,26 +189,28 @@ class OffboardingUser:
             return ""
 
         return cls(
-            abbreviation=safe_get(0),
-            title_pre=safe_get(1),
-            first_name=safe_get(2),
-            last_name=safe_get(3),
-            title_post=safe_get(4),
-            begin_date=safe_get(5),
-            end_date=safe_get(6),
-            exit_date=safe_get(18),  # Last work date (Letzter Arbeitstag)
-            room=safe_get(7),
-            birth_date=safe_get(8),
-            mobile=safe_get(9),
-            email=safe_get(10),
-            phone=safe_get(11),
-            kostenstelle=safe_get(12),
-            stundensatz=safe_get(13),
-            berufstraeger=safe_get(14),
-            team=safe_get(15),
-            umf_besetz=safe_get(16),
-            position=safe_get(17),
-            kommentar=safe_get(19),
+            personalnummer=safe_get(0),
+            abbreviation=safe_get(1),
+            title_pre=safe_get(2),
+            first_name=safe_get(3),
+            last_name=safe_get(4),
+            title_post=safe_get(5),
+            begin_date=safe_get(6),
+            end_date=safe_get(7),
+            exit_date=safe_get(20),  # Last work date (Letzter Arbeitstag)
+            room=safe_get(8),
+            birth_date=safe_get(9),
+            geschlecht=safe_get(10),
+            mobile=safe_get(11),
+            email=safe_get(12),
+            phone=safe_get(13),
+            kostenstelle=safe_get(14),
+            stundensatz=safe_get(15),
+            berufstraeger=safe_get(16),
+            team=safe_get(17),
+            umf_besetz=safe_get(18),
+            position=safe_get(19),
+            kommentar=safe_get(21),
         )
 
     @property
