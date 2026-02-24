@@ -46,7 +46,8 @@ def user_exists_in_ad(abbreviation: str) -> bool:
         text=True,
         timeout=30,
     )
-    return "FOUND" in result.stdout
+    output = result.stdout.strip()
+    return output == "FOUND"
 
 
 def _run_ps(script: str, *, description: str) -> subprocess.CompletedProcess[str]:
