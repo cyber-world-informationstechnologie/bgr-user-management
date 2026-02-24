@@ -107,6 +107,11 @@ class OnboardingUser:
         return " ".join(p for p in parts if p)
 
     @property
+    def gender(self) -> str:
+        """Alias for geschlecht (M/W)."""
+        return self.geschlecht
+
+    @property
     def is_reinigungskraft(self) -> bool:
         """Return True if the user is cleaning staff (Reinigungskraft)."""
         return self.position == "Mitarbeiter*in Reinigung"
