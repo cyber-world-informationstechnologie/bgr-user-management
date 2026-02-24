@@ -101,6 +101,11 @@ class OnboardingUser:
         return " ".join(p for p in parts if p)
 
     @property
+    def is_reinigungskraft(self) -> bool:
+        """Return True if the user is cleaning staff (Reinigungskraft)."""
+        return self.position == "Mitarbeiter*in Reinigung"
+
+    @property
     def phone_extension(self) -> str:
         """Extract the last 3 digits from the phone number as the extension (DW)."""
         digits = "".join(c for c in self.phone if c.isdigit())
