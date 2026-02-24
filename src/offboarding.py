@@ -246,6 +246,16 @@ def _send_notification_on_new_users(users: list[OffboardingUser], resend: bool =
         users: List of all users from LOGA API
         resend: If True, resend even if already notified to team
     """
+    # Filter out users with exit_date in February 2026 (already sent manually)
+    users = [
+        u for u in users
+        if not (
+            u.exit_date
+            and datetime.strptime(u.exit_date, "%d.%m.%Y").month == 2
+            and datetime.strptime(u.exit_date, "%d.%m.%Y").year == 2026
+        )
+    ]
+
     # Filter out users who have already been included in a team notification (unless resend=True)
     if not resend:
         new_users = [u for u in users if not _has_notification_been_sent(u.email)]
@@ -291,7 +301,7 @@ def _send_notification_on_new_users(users: list[OffboardingUser], resend: bool =
         html_body = build_offboarding_email(email_rows)
         bcc = [addr.strip() for addr in settings.offboarding_notification_email_bcc.split(",") if addr.strip()]
         send_email(
-            subject=f"Austrittsmitteilung — {len(new_users)} Benutzer erkannt",
+            subject="Offboarding",
             html_body=html_body,
             to_recipients=[settings.offboarding_notification_email_to],
             bcc_recipients=bcc or None,

@@ -134,7 +134,7 @@ def build_onboarding_email(rows: list[EmailRow]) -> str:
     if not rows:
         return ""
 
-    html = "<h2><span style='font-size: 12px;'>Bevorstehende Eintritte:</span></h2>\n"
+    html = "<h2><span style='font-family: Arial, sans-serif; font-size: 10pt;'>Bevorstehende Eintritte:</span></h2>\n"
     html += _ONBOARDING_TABLE_HEADER
 
     for row in rows:
@@ -166,7 +166,7 @@ def build_offboarding_email(rows: list[OffboardingEmailRow]) -> str:
     if not rows:
         return ""
 
-    html = "<h2><span style='font-size: 12px;'>Durchgeführte Austritte:</span></h2>\n"
+    html = "<h2><span style='font-family: Arial, sans-serif; font-size: 10pt;'>Bevorstehende Austritte:</span></h2>\n"
     html += _OFFBOARDING_TABLE_HEADER
 
     for row in rows:
