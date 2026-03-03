@@ -339,16 +339,41 @@ def reconcile_user(
 
 
 def set_calendar_permissions(user: OnboardingUser) -> None:
-    """Set default calendar (Kalender) folder permissions to Reviewer.
+    """Set default calendar folder permissions to Reviewer.
 
     Grants everyone (Default user) Reviewer rights on the user's calendar,
     so all colleagues can see free/busy details.
+
+    The calendar folder name depends on the mailbox language — "Kalender"
+    (German) or "Calendar" (English).  The script tries "Kalender" first
+    and falls back to "Calendar".
     """
     script = f"""
 Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue
 
-Set-MailboxFolderPermission -Identity ('{_escape(user.abbreviation)}' + ':\\kalender') -User Default -AccessRights Reviewer -ErrorAction Stop
-Write-Output "Calendar permissions set for {_escape(user.abbreviation)}"
+$user = '{_escape(user.abbreviation)}'
+$set = $false
+
+# Try German folder name first
+try {{
+    Set-MailboxFolderPermission -Identity ($user + ':\\kalender') -User Default -AccessRights Reviewer -ErrorAction Stop
+    Write-Output "Calendar permissions set (Kalender) for $user"
+    $set = $true
+}} catch {{
+    Write-Output "Folder 'Kalender' not found, trying 'Calendar'..."
+}}
+
+# Fall back to English folder name
+if (-not $set) {{
+    try {{
+        Set-MailboxFolderPermission -Identity ($user + ':\\calendar') -User Default -AccessRights Reviewer -ErrorAction Stop
+        Write-Output "Calendar permissions set (Calendar) for $user"
+        $set = $true
+    }} catch {{
+        Write-Error "Could not set calendar permissions — neither 'Kalender' nor 'Calendar' folder found for $user"
+        exit 1
+    }}
+}}
 """
     _run_ps(script, description=f"Set calendar permissions {user.abbreviation}")
     logger.info("Set calendar folder permissions (Reviewer) for %s", user.abbreviation)
