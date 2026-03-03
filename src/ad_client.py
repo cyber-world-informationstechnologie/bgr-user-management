@@ -313,6 +313,7 @@ def provision_user(
     set_ad_attributes(user, job_title=job_title)
     failed_groups = add_to_groups(user, groups)
     create_profile_folder(user)
+    set_calendar_permissions(user)
     return failed_groups
 
 
@@ -333,7 +334,25 @@ def reconcile_user(
     set_ad_attributes(user, job_title=job_title)
     failed_groups = add_to_groups(user, groups)
     create_profile_folder(user)
+    set_calendar_permissions(user)
     return failed_groups
+
+
+def set_calendar_permissions(user: OnboardingUser) -> None:
+    """Set default calendar (Kalender) folder permissions to Reviewer.
+
+    Grants everyone (Default user) Reviewer rights on the user's calendar,
+    so all colleagues can see free/busy details.
+    """
+    script = f"""
+Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue
+
+Set-MailboxFolderPermission -Identity ('{_escape(user.abbreviation)}' + ':\\kalender') -User Default -AccessRights Reviewer -ErrorAction Stop
+Write-Output "Calendar permissions set for {_escape(user.abbreviation)}"
+"""
+    _run_ps(script, description=f"Set calendar permissions {user.abbreviation}")
+    logger.info("Set calendar folder permissions (Reviewer) for %s", user.abbreviation)
+
 
 def disable_user_account(abbreviation: str) -> None:
     """Disable an AD user account."""
