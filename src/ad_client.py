@@ -6,6 +6,7 @@ Runs on the Exchange server — uses New-RemoteMailbox to create a remote mailbo
 
 import base64
 import logging
+import re
 import subprocess
 
 from src.config import settings
@@ -15,6 +16,20 @@ logger = logging.getLogger(__name__)
 
 # Prefix prepended to every PowerShell script so AD cmdlets are always available.
 _PS_PREAMBLE = "Import-Module ActiveDirectory -ErrorAction SilentlyContinue\n"
+
+# Regex to extract human-readable error messages from PowerShell CLIXML stderr output.
+_CLIXML_ERROR_RE = re.compile(r'<S S="Error">(.+?)</S>', re.DOTALL)
+
+
+def _strip_clixml(stderr: str) -> str:
+    """Extract readable error lines from CLIXML-encoded PowerShell stderr."""
+    if "#< CLIXML" not in stderr:
+        return stderr
+    matches = _CLIXML_ERROR_RE.findall(stderr)
+    if not matches:
+        return stderr
+    lines = [m.replace("_x000D__x000A_", "").strip() for m in matches]
+    return "\n".join(line for line in lines if line)
 
 
 def _encode_command(script: str) -> str:
@@ -72,14 +87,15 @@ def _run_ps(script: str, *, description: str) -> subprocess.CompletedProcess[str
     )
 
     if result.returncode != 0:
+        clean_stderr = _strip_clixml(result.stderr)
         logger.error(
             "PowerShell [%s] failed (rc=%d):\nSTDOUT: %s\nSTDERR: %s",
             description,
             result.returncode,
             result.stdout,
-            result.stderr,
+            clean_stderr,
         )
-        raise RuntimeError(f"PowerShell [{description}] failed: {result.stderr}")
+        raise RuntimeError(f"PowerShell [{description}] failed: {clean_stderr}")
 
     logger.debug("PowerShell [%s] output: %s", description, result.stdout.strip())
     return result

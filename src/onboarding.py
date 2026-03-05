@@ -68,7 +68,7 @@ def _process_user(user: OnboardingUser, *, exists: bool) -> EmailRow | None:
                         f"<strong>{user.full_display_name}</strong> ({user.email}) "
                         f"ist fehlgeschlagen. Bitte manuell prüfen.</p>"
                     ),
-                    to_recipients=[settings.error_notification_email],
+                    to_recipients=[addr.strip() for addr in settings.error_notification_email.split(",") if addr.strip()],
                 )
             except Exception:
                 logger.exception("Failed to send error notification email")
