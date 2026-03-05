@@ -274,10 +274,11 @@ if (-not (Test-Path -Path $folderPath)) {{
 try {{
     $acl = Get-Acl $folderPath
 
-    # Remove non-system permissions
-    $acl.Access | Where-Object {{
-        $_.IdentityReference -notlike "NT AUTHORITY\\*" -and $_.IdentityReference -notlike "BUILTIN\\*"
-    }} | ForEach-Object {{
+    # Break inheritance and remove all inherited ACEs
+    $acl.SetAccessRuleProtection($true, $false)
+
+    # Remove all existing explicit permissions
+    $acl.Access | ForEach-Object {{
         $acl.RemoveAccessRule($_) | Out-Null
     }}
 
@@ -303,6 +304,16 @@ try {{
         "Allow"
     )
     $acl.AddAccessRule($adminPermission)
+
+    # Full control for SYSTEM
+    $systemPermission = New-Object System.Security.AccessControl.FileSystemAccessRule(
+        "NT AUTHORITY\\SYSTEM",
+        "FullControl",
+        "ContainerInherit,ObjectInherit",
+        "None",
+        "Allow"
+    )
+    $acl.AddAccessRule($systemPermission)
 
     Set-Acl -Path $folderPath -AclObject $acl
     Write-Output "Permissions set for: $userIdentity"
