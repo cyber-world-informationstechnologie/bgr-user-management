@@ -58,11 +58,11 @@ _OU_TO_GROUP: dict[str, str] = {
 # ---------------------------------------------------------------------------
 _POSITION_GROUPS: dict[str, list[str] | dict[str, list[str]]] = {
     # --- Juristen und juristische Mitarbeiter ---
-    "Rechtsanwaltsanwärter-in": {
+    "Rechtsanwaltsanwärter*in": {
         "wien": ["Konzipienten-Wien"],
         "ibk": ["Konzipienten-Innsbruck"],
     },
-    "Anwalt/Anwältin - selbständig": {
+    "Anwalt/Anwältin selbstständig": {
         "wien": ["Anwaelte-Wien"],
         "ibk": ["Anwaelte-Innsbruck"],
     },
@@ -71,59 +71,63 @@ _POSITION_GROUPS: dict[str, list[str] | dict[str, list[str]]] = {
         "wien": ["Anwaelte-Wien"],
         "ibk": ["Anwaelte-Innsbruck"],
     },
-    "Partner-in": {
+    "Partner*in": {
         "wien": ["Partner-Wien"],
         "ibk": ["Partner-Innsbruck"],
     },
-    "Juristische-r Ferialpraktikant-in": ["Praktikanten"],
-    "Juristische-r Praktikant-in": ["Praktikanten"],
-    "Juristische-r Praktikant-in - geringfügig": ["Praktikanten"],
-    "Juristische Mitarbeiter*in": ["Juristische Mitarbeiter"],
+    "Juristische*r Ferialpraktikant*in": ["Praktikanten"],
+    "Juristische*r Praktikant*in": ["Praktikanten"],
+    "Juristische*r Mitarbeiter*in": ["Juristische Mitarbeiter"],
+    "NJ-Praktikant*in": ["Praktikanten"],
     "Trademark Paralegal": {
         "ibk": ["TMParalegal-Innsbruck"],
     },
     # --- Leiter ---
-    "Leiter-in IT": {
+    "Leiter*in IT": {
         "all": ["Ausschussleiter"],
         "wien": ["IT-Team"],
     },
-    "Leiter-in KOM": {
+    "Leiter*in KOM": {
         "all": ["Ausschussleiter"],
         "wien": ["KOM-Team"],
     },
-    "Leiterin-in HR": {
+    "Leiter*in HR": {
         "all": ["Ausschussleiter"],
         "wien": ["HR-Team"],
     },
-    "Leiter-in Finanzen": ["BUHA", "HOVE", "Ausschussleiter"],
-    "Leiter-in Rezeption": ["Rezeption intern", "Rezeption"],
+    "Leiter*in FIN": ["BUHA", "HOVE", "Ausschussleiter"],
+    "Leiter*in Rezeption": ["Rezeption intern", "Rezeption"],
     # --- Mitarbeiter ---
-    "Mitarbeiter-in IT": {
+    "Mitarbeiter*in IT": {
         "wien": ["IT-Team"],
     },
-    "Mitarbeiter-in HR": {
+    "Mitarbeiter*in HR": {
         "wien": ["HR-Team"],
     },
-    "MP Assistent-in": {
+    "MP Assistent*in": {
         "wien": ["OM-Team"],
     },
-    "Mitarbeiter-in Bibliothek": {
+    "Mitarbeiter*in Bibliothek": {
         "wien": ["Bibliothek"],
     },
-    "Mitarbeiter-in KOM": {
+    "Mitarbeiter*in KOM": {
         "wien": ["kommunikation"],
     },
-    "Sekretariat": {
+    "Assistent*in": {
         "wien": ["Sekretariat-Wien"],
         "ibk": ["Sekretariat-Innsbruck"],
     },
-    "Rezeption": {
+    "Backoffice Assistent*in": {
+        "wien": ["Sekretariat-Wien"],
+        "ibk": ["Sekretariat-Innsbruck"],
+    },
+    "Rezeptionist*in": {
         "wien": ["Rezeption intern", "Rezeption"],
     },
-    "Buchhalter-in": {
+    "Buchhalter*in": {
         "wien": ["BUHA"],
     },
-    "Honorarverrechner-in": {
+    "Honorarverrechner*in": {
         "wien": ["HOVE"],
     },
 }
