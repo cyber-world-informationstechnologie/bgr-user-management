@@ -29,7 +29,21 @@ def _strip_clixml(stderr: str) -> str:
     if not matches:
         return stderr
     lines = [m.replace("_x000D__x000A_", "").strip() for m in matches]
-    return "\n".join(line for line in lines if line)
+    # Keep only actual error indicators, skip echoed script source lines
+    error_lines: list[str] = []
+    for line in lines:
+        if not line:
+            continue
+        if (
+            line.startswith("+")
+            or line.startswith(":")
+            or line.startswith("At line:")
+            or "CategoryInfo" in line
+            or "FullyQualifiedErrorId" in line
+            or re.match(r"^[\w-]+ : ", line)
+        ):
+            error_lines.append(line)
+    return "\n".join(error_lines) if error_lines else "\n".join(line for line in lines if line)
 
 
 def _encode_command(script: str) -> str:
