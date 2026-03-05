@@ -381,17 +381,26 @@ def reconcile_user(
 
 
 def set_calendar_permissions(user: OnboardingUser) -> None:
-    """Set default calendar folder permissions to Reviewer.
+    """Set default calendar folder permissions to Reviewer via Exchange Online.
 
-    Grants everyone (Default user) Reviewer rights on the user's calendar,
-    so all colleagues can see free/busy details.
+    Connects to EXO using certificate-based auth, then grants everyone
+    (Default user) Reviewer rights on the user's calendar.
 
     The calendar folder name depends on the mailbox language — "Kalender"
     (German) or "Calendar" (English).  The script tries "Kalender" first
     and falls back to "Calendar".
     """
+    if not settings.exo_app_id or not settings.exo_certificate_thumbprint:
+        raise RuntimeError("EXO_APP_ID and EXO_CERTIFICATE_THUMBPRINT must be configured for calendar permissions")
+
     script = f"""
-Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue
+Import-Module ExchangeOnlineManagement -ErrorAction Stop
+Connect-ExchangeOnline `
+    -AppId '{_escape(settings.exo_app_id)}' `
+    -Organization '{_escape(settings.exo_org)}' `
+    -CertificateThumbprint '{_escape(settings.exo_certificate_thumbprint)}' `
+    -ShowBanner:$false `
+    -ErrorAction Stop
 
 $user = '{_escape(user.abbreviation)}'
 $set = $false
@@ -413,9 +422,12 @@ if (-not $set) {{
         $set = $true
     }} catch {{
         Write-Error "Could not set calendar permissions — neither 'Kalender' nor 'Calendar' folder found for $user"
+        Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
         exit 1
     }}
 }}
+
+Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
 """
     _run_ps(script, description=f"Set calendar permissions {user.abbreviation}")
     logger.info("Set calendar folder permissions (Reviewer) for %s", user.abbreviation)

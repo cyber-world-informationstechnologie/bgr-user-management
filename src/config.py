@@ -36,6 +36,11 @@ class Settings(BaseSettings):
         "Bitte kontaktieren Sie uns bei Fragen."
     )
     offboarding_disabled_users_ou: str = "OU=Disabled Users,DC=bgr,DC=at"
+    # ========== Exchange Online (certificate-based auth) ==========
+    exo_app_id: str = ""  # Azure AD App Registration Client ID
+    exo_org: str = "bindergroesswang.at"  # Exchange Online organization domain
+    exo_certificate_thumbprint: str = ""  # Certificate thumbprint (LocalMachine\My)
+
     # ========== Active Directory & Profile Folder ==========
     profile_base_path: str = r"\\bgr\dfs\Profile"
     default_password: str = "Onboarding13IT!"
