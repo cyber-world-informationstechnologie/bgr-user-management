@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     default_password: str = "Onboarding13IT!"
     remote_routing_domain: str = "bindergroesswang-at.mail.onmicrosoft.com"
 
+    # ========== AAD Connect Sync / Calendar Permissions ==========
+    aad_sync_wait: int = 300  # Seconds to wait for AAD Connect sync before setting calendar perms
+    calendar_retry_attempts: int = 6  # Number of retry attempts for calendar permissions
+    calendar_retry_interval: int = 300  # Seconds between retries
+
     # ========== Behavior Flags ==========
     dry_run: bool = True
     reconcile_existing: bool = False  # Re-apply AD attributes for users that already exist

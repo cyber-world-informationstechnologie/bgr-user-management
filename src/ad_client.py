@@ -361,13 +361,6 @@ def provision_user(
     set_ad_attributes(user, job_title=job_title)
     failed_groups = add_to_groups(user, groups)
     create_profile_folder(user)
-    try:
-        set_calendar_permissions(user)
-    except RuntimeError:
-        logger.warning(
-            "Calendar permissions could not be set for %s — mailbox may not be provisioned yet (AAD Connect sync pending)",
-            user.abbreviation,
-        )
     return failed_groups
 
 
@@ -388,13 +381,6 @@ def reconcile_user(
     set_ad_attributes(user, job_title=job_title)
     failed_groups = add_to_groups(user, groups)
     create_profile_folder(user)
-    try:
-        set_calendar_permissions(user)
-    except RuntimeError:
-        logger.warning(
-            "Calendar permissions could not be set for %s — mailbox may not be provisioned yet (AAD Connect sync pending)",
-            user.abbreviation,
-        )
     return failed_groups
 
 

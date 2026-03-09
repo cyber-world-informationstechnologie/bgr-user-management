@@ -6,8 +6,9 @@ the whitelisted Exchange connector.
 """
 
 import logging
+import time
 
-from src.ad_client import provision_user, reconcile_user, user_exists_in_ad
+from src.ad_client import provision_user, reconcile_user, set_calendar_permissions, user_exists_in_ad
 from src.config import settings
 from src.email_builder import EmailRow, build_onboarding_email
 from src.smtp_client import send_email
@@ -18,6 +19,61 @@ from src.models import OnboardingUser
 from src.ou_resolver import resolve_ou
 
 logger = logging.getLogger(__name__)
+
+
+def _set_calendar_permissions_with_retry(users: list[OnboardingUser]) -> None:
+    """Wait for AAD Connect sync, then set calendar permissions with retries.
+
+    New-RemoteMailbox creates the on-prem AD object, but the EXO mailbox only
+    exists after AAD Connect syncs the user to Azure AD.  This function waits
+    an initial period, then retries with a configurable interval.
+    """
+    logger.info(
+        "Waiting %ds for AAD Connect sync before setting calendar permissions for %d user(s)…",
+        settings.aad_sync_wait,
+        len(users),
+    )
+    time.sleep(settings.aad_sync_wait)
+
+    pending = list(users)
+
+    for attempt in range(1, settings.calendar_retry_attempts + 1):
+        still_pending: list[OnboardingUser] = []
+        for user in pending:
+            try:
+                set_calendar_permissions(user)
+                logger.info("Calendar permissions set for %s", user.abbreviation)
+            except RuntimeError:
+                logger.info(
+                    "Calendar permissions attempt %d/%d failed for %s — will retry",
+                    attempt,
+                    settings.calendar_retry_attempts,
+                    user.abbreviation,
+                )
+                still_pending.append(user)
+
+        if not still_pending:
+            logger.info("All calendar permissions set successfully")
+            return
+
+        pending = still_pending
+        if attempt < settings.calendar_retry_attempts:
+            logger.info(
+                "Waiting %ds before retry %d/%d for %d remaining user(s)…",
+                settings.calendar_retry_interval,
+                attempt + 1,
+                settings.calendar_retry_attempts,
+                len(pending),
+            )
+            time.sleep(settings.calendar_retry_interval)
+
+    # Log remaining failures
+    for user in pending:
+        logger.warning(
+            "Calendar permissions could not be set for %s after %d attempts — AAD Connect sync may still be pending",
+            user.abbreviation,
+            settings.calendar_retry_attempts,
+        )
 
 
 def _process_user(user: OnboardingUser, *, exists: bool) -> EmailRow | None:
@@ -116,6 +172,7 @@ def run_onboarding() -> None:
         return
 
     email_rows: list[EmailRow] = []
+    newly_provisioned: list[OnboardingUser] = []
 
     # Step 2: Process each user
     for user in users:
@@ -135,8 +192,14 @@ def run_onboarding() -> None:
         row = _process_user(user, exists=exists)
         if row:
             email_rows.append(row)
+            if not exists and not user.is_reinigungskraft:
+                newly_provisioned.append(user)
 
-    # Step 3: Send summary email
+    # Step 3: Set calendar permissions for newly provisioned users
+    if newly_provisioned and not settings.dry_run:
+        _set_calendar_permissions_with_retry(newly_provisioned)
+
+    # Step 4: Send summary email
     if email_rows:
         html_body = build_onboarding_email(email_rows)
         bcc = [addr.strip() for addr in settings.onboarding_notification_email_bcc.split(",") if addr.strip()]
