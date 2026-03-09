@@ -6,6 +6,7 @@ Runs on the Exchange server — uses New-RemoteMailbox to create a remote mailbo
 
 import base64
 import logging
+import os
 import re
 import subprocess
 
@@ -13,6 +14,12 @@ from src.config import settings
 from src.models import OnboardingUser
 
 logger = logging.getLogger(__name__)
+
+# Full path to 64-bit Windows PowerShell 5.1 – required for Exchange snap-ins.
+_POWERSHELL_EXE = os.path.join(
+    os.environ.get("SystemRoot", r"C:\Windows"),
+    r"System32\WindowsPowerShell\v1.0\powershell.exe",
+)
 
 # Prefix prepended to every PowerShell script so AD cmdlets are always available.
 _PS_PREAMBLE = "Import-Module ActiveDirectory -ErrorAction SilentlyContinue\n"
@@ -94,7 +101,7 @@ def _run_ps(script: str, *, description: str) -> subprocess.CompletedProcess[str
         return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
 
     result = subprocess.run(
-        ["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", _encode_command(full_script)],
+        [_POWERSHELL_EXE, "-NoProfile", "-NonInteractive", "-EncodedCommand", _encode_command(full_script)],
         capture_output=True,
         text=True,
         timeout=120,
