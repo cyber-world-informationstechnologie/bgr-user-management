@@ -77,7 +77,7 @@ def user_exists_in_ad(abbreviation: str) -> bool:
         + f"if (Get-ADUser -Filter {{SamAccountName -eq '{_escape(abbreviation)}'}}) {{ 'FOUND' }} else {{ 'NOTFOUND' }}"
     )
     result = subprocess.run(
-        ["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", _encode_command(script)],
+        [_POWERSHELL_EXE, "-NonInteractive", "-EncodedCommand", _encode_command(script)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -101,7 +101,7 @@ def _run_ps(script: str, *, description: str) -> subprocess.CompletedProcess[str
         return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
 
     result = subprocess.run(
-        [_POWERSHELL_EXE, "-NoProfile", "-NonInteractive", "-EncodedCommand", _encode_command(full_script)],
+        [_POWERSHELL_EXE, "-NonInteractive", "-EncodedCommand", _encode_command(full_script)],
         capture_output=True,
         text=True,
         timeout=120,
