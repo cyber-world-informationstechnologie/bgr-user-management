@@ -24,33 +24,20 @@ _POWERSHELL_EXE = os.path.join(
 # Prefix prepended to every PowerShell script so AD cmdlets are always available.
 _PS_PREAMBLE = "Import-Module ActiveDirectory -ErrorAction SilentlyContinue\n"
 
-# Regex to extract human-readable error messages from PowerShell CLIXML stderr output.
-_CLIXML_ERROR_RE = re.compile(r'<S S="Error">(.+?)</S>', re.DOTALL)
+# Regex to extract human-readable messages from PowerShell CLIXML stderr output.
+# Captures both Error and warning streams.
+_CLIXML_MSG_RE = re.compile(r'<S S="(?:Error|warning)">(.+?)</S>', re.DOTALL)
 
 
 def _strip_clixml(stderr: str) -> str:
-    """Extract readable error lines from CLIXML-encoded PowerShell stderr."""
+    """Extract readable error/warning lines from CLIXML-encoded PowerShell stderr."""
     if "#< CLIXML" not in stderr:
         return stderr
-    matches = _CLIXML_ERROR_RE.findall(stderr)
+    matches = _CLIXML_MSG_RE.findall(stderr)
     if not matches:
         return stderr
     lines = [m.replace("_x000D__x000A_", "").strip() for m in matches]
-    # Keep only actual error indicators, skip echoed script source lines
-    error_lines: list[str] = []
-    for line in lines:
-        if not line:
-            continue
-        if (
-            line.startswith("+")
-            or line.startswith(":")
-            or line.startswith("At line:")
-            or "CategoryInfo" in line
-            or "FullyQualifiedErrorId" in line
-            or re.match(r"^[\w-]+ : ", line)
-        ):
-            error_lines.append(line)
-    return "\n".join(error_lines) if error_lines else "\n".join(line for line in lines if line)
+    return "\n".join(line for line in lines if line)
 
 
 def _encode_command(script: str) -> str:
@@ -398,14 +385,7 @@ def set_calendar_permissions(user: OnboardingUser) -> None:
         raise RuntimeError("EXO_APP_ID and EXO_CERTIFICATE_THUMBPRINT must be configured for calendar permissions")
 
     script = f"""
-Import-Module ExchangeOnlineManagement -ErrorAction Stop
-Connect-ExchangeOnline `
-    -AppId '{_escape(settings.exo_app_id)}' `
-    -Organization '{_escape(settings.exo_org)}' `
-    -CertificateThumbprint '{_escape(settings.exo_certificate_thumbprint)}' `
-    -ShowBanner:$false `
-    -ErrorAction Stop
-
+{_exo_preamble()}
 $user = '{_escape(user.abbreviation)}'
 $set = $false
 
@@ -426,12 +406,12 @@ if (-not $set) {{
         $set = $true
     }} catch {{
         Write-Error "Could not set calendar permissions — neither 'Kalender' nor 'Calendar' folder found for $user"
-        Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
+        {_exo_cleanup()}
         exit 1
     }}
 }}
 
-Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
+{_exo_cleanup()}
 """
     _run_ps(script, description=f"Set calendar permissions {user.abbreviation}")
     logger.info("Set calendar folder permissions (Reviewer) for %s", user.abbreviation)
@@ -505,23 +485,44 @@ if ($groups) {{
 """
     _run_ps(script, description=f"Remove-ADGroupMember all groups {abbreviation}")
     logger.info("Removed user %s from all groups (except Domain Users)", abbreviation)
+def _exo_preamble() -> str:
+    """Return the PowerShell preamble that connects to Exchange Online via cert auth."""
+    if not settings.exo_app_id or not settings.exo_certificate_thumbprint:
+        raise RuntimeError("EXO_APP_ID and EXO_CERTIFICATE_THUMBPRINT must be configured for Exchange Online operations")
+    return (
+        "Import-Module ExchangeOnlineManagement -ErrorAction Stop\n"
+        f"Connect-ExchangeOnline `\n"
+        f"    -AppId '{_escape(settings.exo_app_id)}' `\n"
+        f"    -Organization '{_escape(settings.exo_org)}' `\n"
+        f"    -CertificateThumbprint '{_escape(settings.exo_certificate_thumbprint)}' `\n"
+        f"    -ShowBanner:$false `\n"
+        f"    -ErrorAction Stop\n"
+    )
+
+
+def _exo_cleanup() -> str:
+    """Return the PowerShell epilogue that disconnects from Exchange Online."""
+    return "Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue\n"
+
+
 def convert_mailbox_to_shared(email: str) -> None:
     """Convert a user mailbox to a shared mailbox.
 
     This allows team members to access the mailbox without needing the original password.
+    Connects to Exchange Online via certificate-based auth.
     """
     script = f"""
-Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue
-
+{_exo_preamble()}
 $mailbox = Get-Mailbox -Identity '{_escape(email)}' -ErrorAction SilentlyContinue
 if (-not $mailbox) {{
     Write-Warning 'Mailbox {_escape(email)} not found'
+    {_exo_cleanup()}
     exit 1
 }}
 
-# Convert to shared mailbox
-Set-Mailbox -Identity '{_escape(email)}' -Type Shared -Verbose
+Set-Mailbox -Identity '{_escape(email)}' -Type Shared
 Write-Output "Mailbox converted to Shared: {_escape(email)}"
+{_exo_cleanup()}
 """
     _run_ps(script, description=f"Convert mailbox to shared {email}")
     logger.info("Converted mailbox %s to shared", email)
@@ -531,23 +532,23 @@ def setup_mailbox_forwarding(email: str, forward_to: str) -> None:
     """Set up automatic email forwarding to another mailbox.
 
     Emails will be forwarded AND delivered to the original mailbox (DeliverToMailboxAndForward).
+    Connects to Exchange Online via certificate-based auth.
     """
     script = f"""
-Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue
-
+{_exo_preamble()}
 $mailbox = Get-Mailbox -Identity '{_escape(email)}' -ErrorAction SilentlyContinue
 if (-not $mailbox) {{
     Write-Warning 'Mailbox {_escape(email)} not found'
+    {_exo_cleanup()}
     exit 1
 }}
 
-# Set forwarding address (with copy to original mailbox)
-Set-Mailbox -Identity '{_escape(email)}' 
-    -ForwardingAddress '{_escape(forward_to)}' 
-    -DeliverToMailboxAndForward $true 
-    -Verbose
+Set-Mailbox -Identity '{_escape(email)}' `
+    -ForwardingAddress '{_escape(forward_to)}' `
+    -DeliverToMailboxAndForward $true
 
 Write-Output "Forwarding set: {_escape(email)} -> {_escape(forward_to)} (with copy to original)"
+{_exo_cleanup()}
 """
     _run_ps(script, description=f"Setup forwarding {email} to {forward_to}")
     logger.info("Set up forwarding from %s to %s", email, forward_to)
@@ -557,24 +558,24 @@ def set_mailbox_autoreply(email: str, message: str) -> None:
     """Set up automatic reply (out-of-office) with no end date.
 
     The message is used for both internal and external recipients.
+    Connects to Exchange Online via certificate-based auth.
     """
     script = f"""
-Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue
-
+{_exo_preamble()}
 $mailbox = Get-Mailbox -Identity '{_escape(email)}' -ErrorAction SilentlyContinue
 if (-not $mailbox) {{
     Write-Warning 'Mailbox {_escape(email)} not found'
+    {_exo_cleanup()}
     exit 1
 }}
 
-# Set auto-reply (out-of-office) with no end date
-Set-MailboxAutoReplyConfiguration -Identity '{_escape(email)}' 
-    -AutoReplyState Enabled 
-    -InternalMessage '{_escape(message)}' 
-    -ExternalMessage '{_escape(message)}' 
-    -Verbose
+Set-MailboxAutoReplyConfiguration -Identity '{_escape(email)}' `
+    -AutoReplyState Enabled `
+    -InternalMessage '{_escape(message)}' `
+    -ExternalMessage '{_escape(message)}'
 
 Write-Output "Auto-reply configured for: {_escape(email)}"
+{_exo_cleanup()}
 """
     _run_ps(script, description=f"Set autoreply for {email}")
     logger.info("Set up out-of-office auto-reply for %s", email)
@@ -584,11 +585,10 @@ def remove_from_distribution_groups(email: str) -> None:
     """Remove a user from all distribution groups and mail-enabled security groups.
 
     This prevents emails to those groups from being delivered to the former user's mailbox.
+    Connects to Exchange Online via certificate-based auth.
     """
     script = f"""
-Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue
-
-# Get all distribution groups
+{_exo_preamble()}
 $allGroups = Get-DistributionGroup -ResultSize Unlimited
 
 foreach ($group in $allGroups) {{
@@ -604,6 +604,7 @@ foreach ($group in $allGroups) {{
 }}
 
 Write-Output "Distribution group removal completed for: {_escape(email)}"
+{_exo_cleanup()}
 """
     _run_ps(script, description=f"Remove from distribution groups {email}")
     logger.info("Removed user %s from all distribution groups", email)
