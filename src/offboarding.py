@@ -388,10 +388,11 @@ def _execute_offboarding_operations(users: list[OffboardingUser], resend: bool =
         try:
             html_body = build_offboarding_email(email_rows)
             bcc = [addr.strip() for addr in settings.offboarding_notification_email_bcc.split(",") if addr.strip()]
+            summary_to = [addr.strip() for addr in settings.offboarding_summary_email_to.split(",") if addr.strip()]
             send_email(
                 subject=f"Offboarding abgeschlossen — {len(email_rows)} Benutzer verarbeitet",
                 html_body=html_body,
-                to_recipients=[settings.offboarding_summary_email_to],
+                to_recipients=summary_to,
                 bcc_recipients=bcc or None,
                 from_address=settings.offboarding_notification_email_from,
             )
