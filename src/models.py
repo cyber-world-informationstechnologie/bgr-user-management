@@ -20,29 +20,9 @@ ADDRESS_INNSBRUCK = Address(
 
 @dataclass
 class OnboardingUser:
-    """Represents a user to be onboarded, built from LOGA data.
+    """Represents a user to be onboarded, built from LOGA JSON data.
 
-    LOGA CSV column indices (semicolon-delimited):
-        0  = Personalnummer (personnel number / PNR)
-        1  = Kürzel (abbreviation)
-        2  = Titel (title prefix, e.g. Mag., Dr.)
-        3  = Vorname (first name)
-        4  = Nachname (last name)
-        5  = Titel nach dem Namen (title suffix, e.g. LL.M.)
-        6  = Vertragsbeginn (contract start / begin date)
-        7  = Vertragsende (contract end)
-        8  = Zimmer (room)
-        9  = Geburtsdatum (birth date)
-        10 = Geschlecht (gender, M/W)
-        11 = Handy (mobile)
-        12 = E-Mail (email)
-        13 = Telefon (phone)
-        14 = Kostenstelle (cost center)
-        15 = Stundensatz (hourly rate)
-        16 = Berufsträger (professional carrier flag)
-        17 = Team (team)
-        18 = FTE (full-time equivalent)
-        19 = Stellenbezeichnung (job title / position)
+    Fields are mapped from P&I LOGA Scout report ``fieldTitle`` values.
     """
 
     personalnummer: str
@@ -67,38 +47,41 @@ class OnboardingUser:
     position: str  # raw position from LOGA
 
     @classmethod
-    def from_loga_row(cls, row: list[str]) -> "OnboardingUser":
-        """Create an OnboardingUser from a LOGA data row (array of strings).
-        
-        Handles rows with 20+ fields (tolerates trailing empty fields).
-        """
+    def from_loga_row(cls, row: dict[str, str]) -> "OnboardingUser":
+        """Create an OnboardingUser from a LOGA data row (header-keyed dict).
 
-        def safe_get(index: int) -> str:
-            if index < len(row):
-                return (row[index] or "").strip()
+        Handles P&I JSON column names including duplicates — the second
+        ``Kostenstelle`` (renamed to ``Kostenstelle#2`` by the client) is
+        actually the Team/Partner field, and ``Umfang d.Besetz`` maps to FTE.
+        """
+        def g(*names: str) -> str:
+            for n in names:
+                v = row.get(n, "")
+                if v:
+                    return v
             return ""
 
         return cls(
-            personalnummer=safe_get(0),
-            abbreviation=safe_get(1),
-            title_pre=safe_get(2),
-            first_name=safe_get(3),
-            last_name=safe_get(4),
-            title_post=safe_get(5),
-            begin_date=safe_get(6),
-            end_date=safe_get(7),
-            room=safe_get(8),
-            birth_date=safe_get(9),
-            geschlecht=safe_get(10),
-            mobile=safe_get(11),
-            email=safe_get(12),
-            phone=safe_get(13),
-            kostenstelle=safe_get(14),
-            stundensatz=safe_get(15),
-            berufstraeger=safe_get(16),
-            team=safe_get(17),
-            umf_besetz=safe_get(18),
-            position=safe_get(19),
+            personalnummer=g("Personalnummer"),
+            abbreviation=g("Kürzel"),
+            title_pre=g("Titel"),
+            first_name=g("Vorname"),
+            last_name=g("Nachname"),
+            title_post=g("Titel nach dem Namen"),
+            begin_date=g("Vertragsbeginn"),
+            end_date=g("Vertragsende"),
+            room=g("Zimmer"),
+            birth_date=g("Geburtsdatum"),
+            geschlecht=g("Geschlecht"),
+            mobile=g("Handy"),
+            email=g("E-Mail"),
+            phone=g("Telefon"),
+            kostenstelle=g("Kostenstelle"),
+            stundensatz=g("Stundensatz"),
+            berufstraeger=g("Berufsträger"),
+            team=g("Team", "Kostenstelle#2"),
+            umf_besetz=g("FTE", "Umfang d.Besetz"),
+            position=g("Stellenbezeichnung", "Stellenart"),
         )
 
     @property
@@ -131,34 +114,11 @@ class OnboardingUser:
 
 @dataclass
 class OffboardingUser:
-    """Represents a user to be offboarded, built from LOGA data.
+    """Represents a user to be offboarded, built from LOGA JSON data.
 
     Uses the same data structure as OnboardingUser, but adds exit_date
-    (Letzter Arbeitstag) for offboarding operations.
-
-    LOGA CSV column indices (semicolon-delimited):
-        0  = Personalnummer (personnel number / PNR)
-        1  = Kürzel (abbreviation)
-        2  = Titel (title prefix, e.g. Mag., Dr.)
-        3  = Vorname (first name)
-        4  = Nachname (last name)
-        5  = Titel nach dem Namen (title suffix, e.g. LL.M.)
-        6  = Vertragsbeginn (contract start / begin date)
-        7  = Vertragsende (contract end)
-        8  = Zimmer (room)
-        9  = Geburtsdatum (birth date)
-        10 = Geschlecht (gender, M/W)
-        11 = Handy (mobile)
-        12 = E-Mail (email)
-        13 = Telefon (phone)
-        14 = Kostenstelle (cost center)
-        15 = Stundensatz (hourly rate)
-        16 = Berufsträger (professional carrier flag)
-        17 = Team (team)
-        18 = FTE (full-time equivalent)
-        19 = Stellenbezeichnung (job title / position)
-        20 = Letzter Arbeitstag (exit date / last work day)
-        21 = Kommentar (comment, e.g. expected re-entry)
+    (Letzter Arbeitstag) and kommentar for offboarding operations.
+    Fields are mapped from P&I LOGA Scout report ``fieldTitle`` values.
     """
 
     personalnummer: str
@@ -185,37 +145,38 @@ class OffboardingUser:
     kommentar: str  # Comment (e.g. expected re-entry date)
 
     @classmethod
-    def from_loga_row(cls, row: list[str]) -> "OffboardingUser":
-        """Create an OffboardingUser from LOGA data row."""
-
-        def safe_get(index: int) -> str:
-            if index < len(row):
-                return (row[index] or "").strip()
+    def from_loga_row(cls, row: dict[str, str]) -> "OffboardingUser":
+        """Create an OffboardingUser from a LOGA data row (header-keyed dict)."""
+        def g(*names: str) -> str:
+            for n in names:
+                v = row.get(n, "")
+                if v:
+                    return v
             return ""
 
         return cls(
-            personalnummer=safe_get(0),
-            abbreviation=safe_get(1),
-            title_pre=safe_get(2),
-            first_name=safe_get(3),
-            last_name=safe_get(4),
-            title_post=safe_get(5),
-            begin_date=safe_get(6),
-            end_date=safe_get(7),
-            exit_date=safe_get(20),  # Last work date (Letzter Arbeitstag)
-            room=safe_get(8),
-            birth_date=safe_get(9),
-            geschlecht=safe_get(10),
-            mobile=safe_get(11),
-            email=safe_get(12),
-            phone=safe_get(13),
-            kostenstelle=safe_get(14),
-            stundensatz=safe_get(15),
-            berufstraeger=safe_get(16),
-            team=safe_get(17),
-            umf_besetz=safe_get(18),
-            position=safe_get(19),
-            kommentar=safe_get(21),
+            personalnummer=g("Personalnummer"),
+            abbreviation=g("Kürzel"),
+            title_pre=g("Titel"),
+            first_name=g("Vorname"),
+            last_name=g("Nachname"),
+            title_post=g("Titel nach dem Namen"),
+            begin_date=g("Vertragsbeginn"),
+            end_date=g("Vertragsende"),
+            exit_date=g("Letzter Arbeitstag"),
+            room=g("Zimmer"),
+            birth_date=g("Geburtsdatum"),
+            geschlecht=g("Geschlecht"),
+            mobile=g("Handy"),
+            email=g("E-Mail"),
+            phone=g("Telefon"),
+            kostenstelle=g("Kostenstelle"),
+            stundensatz=g("Stundensatz"),
+            berufstraeger=g("Berufsträger"),
+            team=g("Team"),
+            umf_besetz=g("FTE"),
+            position=g("Stellenbezeichnung"),
+            kommentar=g("Kommentar"),
         )
 
     @property
