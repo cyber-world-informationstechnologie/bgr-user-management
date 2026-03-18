@@ -34,14 +34,36 @@ OFFBOARDED_USERS_FILE = Path("logs") / "offboarded_users.json"
 
 
 def _get_manager_email(user: OffboardingUser) -> str | None:
-    """Lookup manager email from manager abbreviation (team field).
+    """Lookup manager email from their abbreviation (extracted from team field).
 
-    This is a simplified version — in production you'd query AD for the manager's details.
+    Queries AD for the user whose SamAccountName matches the manager abbreviation
+    and returns their mail attribute.
     """
-    # TODO: Query AD to get manager's email from abbreviation
-    # For now, return None — the mailbox will remain without forwarding if manager not found
-    if user.manager_abbreviation:
-        logger.info("Manager abbreviation for %s: %s", user.email, user.manager_abbreviation)
+    abbr = user.manager_abbreviation
+    if not abbr:
+        return None
+
+    logger.info("Manager abbreviation for %s: %s", user.email, abbr)
+
+    from src.ad_client import _run_ps, _escape
+
+    script = f"""
+$mgr = Get-ADUser -Filter {{ SamAccountName -eq '{_escape(abbr)}' }} -Properties mail
+if ($mgr -and $mgr.mail) {{
+    Write-Output $mgr.mail
+}} else {{
+    Write-Output ''
+}}
+"""
+    try:
+        result = _run_ps(script, description=f"Lookup manager email for {abbr}")
+        email = result.stdout.strip()
+        if email:
+            logger.info("Resolved manager %s -> %s", abbr, email)
+            return email
+        logger.warning("Manager %s found in AD but has no mail attribute", abbr)
+    except Exception:
+        logger.warning("Could not resolve manager abbreviation %s from AD", abbr, exc_info=True)
     return None
 
 
@@ -192,8 +214,11 @@ def _process_user(user: OffboardingUser) -> OffboardingEmailRow | None:
         return None
 
 
-def run_offboarding(resend: bool = False) -> None:
+def run_offboarding(resend: bool = False) -> bool:
     """Execute the full offboarding flow in two phases.
+
+    Returns:
+        True if all operations succeeded, False if any user failed.
 
     **Phase 1:** Send notification email
     - Fetch ALL exiting users from LOGA API
@@ -227,13 +252,19 @@ def run_offboarding(resend: bool = False) -> None:
     yesterday = (datetime.now() - timedelta(days=1)).strftime("%d.%m.%Y")
     offboarding_users = [u for u in users if u.exit_date == yesterday]
     
+    failed_count = 0
     if offboarding_users:
         logger.info("Phase 2: Executing offboarding for %d users with exit_date = %s", len(offboarding_users), yesterday)
-        _execute_offboarding_operations(offboarding_users, resend)
+        failed_count = _execute_offboarding_operations(offboarding_users, resend)
     else:
         logger.info("Phase 2: No users to offboard today (looking for exit_date=%s)", yesterday)
 
-    logger.info("Offboarding process completed")
+    if failed_count:
+        logger.error("Offboarding process completed with %d failure(s)", failed_count)
+        return False
+
+    logger.info("Offboarding process completed successfully")
+    return True
 
 
 def _send_notification_on_new_users(users: list[OffboardingUser], resend: bool = False) -> None:
@@ -317,12 +348,15 @@ def _send_notification_on_new_users(users: list[OffboardingUser], resend: bool =
         logger.exception("Failed to send notification email to offboarding team")
 
 
-def _execute_offboarding_operations(users: list[OffboardingUser], resend: bool = False) -> None:
+def _execute_offboarding_operations(users: list[OffboardingUser], resend: bool = False) -> int:
     """Phase 2: Execute offboarding operations the day after exit_date.
     
     Args:
         users: List of users with exit_date = yesterday
         resend: If True, re-execute even if already completed
+
+    Returns:
+        Number of users that failed offboarding.
     """
     # Filter out users who have already completed offboarding (unless resend=True)
     if not resend:
@@ -337,17 +371,20 @@ def _execute_offboarding_operations(users: list[OffboardingUser], resend: bool =
         
         if not users:
             logger.info("Phase 2: No new users to offboard")
-            return
+            return 0
 
     # Process each user and collect results
     email_rows: list[OffboardingEmailRow] = []
+    failed_count = 0
     for user in users:
         row = _process_user(user)
         if row:
             email_rows.append(row)
+        else:
+            failed_count += 1
 
-    # Send summary email with operations completed
-    if email_rows:
+    # Send summary email ONLY if ALL users succeeded
+    if email_rows and failed_count == 0:
         try:
             html_body = build_offboarding_email(email_rows)
             bcc = [addr.strip() for addr in settings.offboarding_notification_email_bcc.split(",") if addr.strip()]
@@ -366,3 +403,14 @@ def _execute_offboarding_operations(users: list[OffboardingUser], resend: bool =
             logger.info("Marked %d users as offboarded", len(email_rows))
         except Exception:
             logger.exception("Failed to send summary email")
+    elif email_rows and failed_count > 0:
+        logger.warning(
+            "Skipping success summary email — %d of %d users failed offboarding",
+            failed_count, len(users),
+        )
+        # Still mark the successful ones so they don't get re-processed
+        for row in email_rows:
+            _mark_user_as_offboarded(row.email)
+        logger.info("Marked %d successfully offboarded users (out of %d total)", len(email_rows), len(users))
+
+    return failed_count

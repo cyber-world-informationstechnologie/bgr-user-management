@@ -35,7 +35,7 @@ class Settings(BaseSettings):
         "Diese Person ist nicht mehr bei unserem Unternehmen tätig. "
         "Bitte kontaktieren Sie uns bei Fragen."
     )
-    offboarding_disabled_users_ou: str = "OU=Disabled Users,DC=bgr,DC=at"
+    offboarding_disabled_users_ou: str = "OU=disabled,OU=BGUser,DC=bgr,DC=at"
     # ========== Exchange Online (certificate-based auth) ==========
     exo_app_id: str = ""  # Azure AD App Registration Client ID
     exo_org: str = "bindergroesswang.at"  # Exchange Online organization domain

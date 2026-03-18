@@ -29,15 +29,44 @@ _PS_PREAMBLE = "Import-Module ActiveDirectory -ErrorAction SilentlyContinue\n"
 _CLIXML_MSG_RE = re.compile(r'<S S="(?:Error|warning)">(.+?)</S>', re.DOTALL)
 
 
+# Regex to detect PowerShell error/warning context lines in plain-text stderr.
+_PS_NOISE_RE = re.compile(
+    r'^(\s*\+\s|\s*~|At line:\d|\s*$|.*CategoryInfo.*|.*FullyQualifiedErrorId.*)'
+)
+
+
 def _strip_clixml(stderr: str) -> str:
-    """Extract readable error/warning lines from CLIXML-encoded PowerShell stderr."""
-    if "#< CLIXML" not in stderr:
-        return stderr
-    matches = _CLIXML_MSG_RE.findall(stderr)
-    if not matches:
-        return stderr
-    lines = [m.replace("_x000D__x000A_", "").strip() for m in matches]
-    return "\n".join(line for line in lines if line)
+    """Extract readable error/warning lines from PowerShell stderr.
+
+    Handles two formats:
+    - CLIXML-encoded (<Objs …> envelope) — extracts Error and warning streams.
+    - Plain text — strips echoed script source, keeping only meaningful messages.
+    """
+    if "#< CLIXML" in stderr:
+        matches = _CLIXML_MSG_RE.findall(stderr)
+        if matches:
+            lines = [m.replace("_x000D__x000A_", "").strip() for m in matches]
+            return "\n".join(line for line in lines if line)
+
+    # Plain-text stderr: PowerShell often echoes the script followed by the
+    # actual error. Walk lines from the end to find the first error indicator,
+    # then keep everything from there.
+    raw_lines = stderr.strip().splitlines()
+    meaningful: list[str] = []
+    for line in raw_lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # Skip lines that look like echoed script source
+        if _PS_NOISE_RE.match(stripped):
+            continue
+        # Keep lines that start with known error prefixes
+        if any(stripped.startswith(p) for p in ("Write-Error", "Failed to", "Error:")):
+            meaningful.append(stripped)
+        elif " : " in stripped:
+            # PowerShell error format: "<cmdlet> : <message>"
+            meaningful.append(stripped)
+    return "\n".join(meaningful) if meaningful else stderr.strip()
 
 
 def _encode_command(script: str) -> str:

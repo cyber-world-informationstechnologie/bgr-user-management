@@ -91,7 +91,10 @@ def main() -> None:
         if args.mode == "onboarding":
             run_onboarding()
         elif args.mode == "offboarding":
-            run_offboarding(resend=args.resend)
+            success = run_offboarding(resend=args.resend)
+            if not success:
+                logger.error("Process completed with failures")
+                sys.exit(1)
         logger.info("Process completed successfully")
     except Exception as e:
         logger.error("Process failed with exception: %s", e, exc_info=True)
