@@ -391,11 +391,11 @@ def _execute_offboarding_operations(users: list[OffboardingUser], resend: bool =
             send_email(
                 subject=f"Offboarding abgeschlossen — {len(email_rows)} Benutzer verarbeitet",
                 html_body=html_body,
-                to_recipients=[settings.offboarding_notification_email_to],
+                to_recipients=[settings.offboarding_summary_email_to],
                 bcc_recipients=bcc or None,
                 from_address=settings.offboarding_notification_email_from,
             )
-            logger.info("Offboarding summary email sent to %s", settings.offboarding_notification_email_to)
+            logger.info("Offboarding summary email sent to %s", settings.offboarding_summary_email_to)
             
             # Mark all successfully processed users as offboarded
             for row in email_rows:

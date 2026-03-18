@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     offboarding_notification_email_to: str = "markus.hinkel@cwi.at"
     offboarding_notification_email_bcc: str = ""
     offboarding_notification_email_from: str = "offboarding@bgr.at"
+    offboarding_summary_email_to: str = "markus.hinkel@cwi.at"
 
     # ========== Error Notifications (comma-separated for multiple recipients) ==========
     error_notification_email: str = "markus.hinkel@cwi.at"
