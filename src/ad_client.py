@@ -160,34 +160,49 @@ def _run_ps(script: str, *, description: str) -> subprocess.CompletedProcess[str
 
 
 def create_mailbox(user: OnboardingUser, *, ou: str) -> None:
-    """Create a remote mailbox (cloud-hosted) with an on-premise AD account.
+    """Create an AD user with remote mailbox attributes for AAD Connect.
 
-    Uses New-RemoteMailbox which creates the AD user and sets up mail-routing
-    to Exchange Online via the remote routing address.
+    Uses pure AD cmdlets (New-ADUser + Set-ADUser) instead of the Exchange
+    snap-in's New-RemoteMailbox, which has TypeInitializationException issues
+    in non-interactive scheduled task sessions without a local Exchange install.
+    AAD Connect picks up the Exchange attributes and provisions the cloud
+    mailbox in Exchange Online.
     """
     abrev_upper = user.abbreviation.upper()
     display_name = f"{user.last_name}, {user.first_name}"
     routing_address = f"{abrev_upper}@{settings.remote_routing_domain}"
 
     script = f"""
-Add-PSSnapin Microsoft.Exchange.Management.PowerShell.SnapIn -ErrorAction SilentlyContinue
+$password = ConvertTo-SecureString '{_escape(settings.default_password)}' -AsPlainText -Force
 
-New-RemoteMailbox `
-    -Password (ConvertTo-SecureString '{settings.default_password}' -AsPlainText -Force) `
+New-ADUser `
     -Name '{_escape(display_name)}' `
     -DisplayName '{_escape(display_name)}' `
-    -FirstName '{_escape(user.first_name)}' `
-    -LastName '{_escape(user.last_name)}' `
+    -GivenName '{_escape(user.first_name)}' `
+    -Surname '{_escape(user.last_name)}' `
     -SamAccountName '{abrev_upper}' `
     -UserPrincipalName '{abrev_upper}@bgr.at' `
-    -OnPremisesOrganizationalUnit '{_escape(ou)}' `
+    -Path '{_escape(ou)}' `
     -Initials '{abrev_upper}' `
-    -PrimarySmtpAddress '{_escape(user.email)}' `
-    -RemoteRoutingAddress '{routing_address}' `
-    -ResetPasswordOnNextLogon $true `
-    -Verbose
+    -AccountPassword $password `
+    -ChangePasswordAtLogon $true `
+    -Enabled $true
+
+# Set Exchange remote mailbox attributes so AAD Connect provisions the EXO mailbox
+Set-ADUser -Identity '{abrev_upper}' -Replace @{{
+    mail                        = '{_escape(user.email)}'
+    mailNickname                = '{abrev_upper}'
+    targetAddress               = 'SMTP:{_escape(routing_address)}'
+    proxyAddresses              = @('SMTP:{_escape(user.email)}', 'smtp:{_escape(routing_address)}')
+    msExchRemoteRecipientType   = 4
+    msExchRecipientDisplayType  = -2147483642
+    msExchRecipientTypeDetails  = [Int64]2147483648
+    msExchVersion               = [Int64]44220983382016
+}}
+
+Write-Output "Created remote mailbox user {abrev_upper}"
 """
-    _run_ps(script, description=f"New-RemoteMailbox {user.email}")
+    _run_ps(script, description=f"Create remote mailbox {user.email}")
     logger.info("Created remote mailbox for %s", user.email)
 
 
