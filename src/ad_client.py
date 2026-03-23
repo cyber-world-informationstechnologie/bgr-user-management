@@ -16,9 +16,13 @@ from src.models import OnboardingUser
 logger = logging.getLogger(__name__)
 
 # Full path to 64-bit Windows PowerShell 5.1 – required for Exchange snap-ins.
+# Use Sysnative to bypass WOW64 redirection when the calling process is 32-bit;
+# this ensures we always get 64-bit PowerShell even from a scheduled task.
+_sysroot = os.environ.get("SystemRoot", r"C:\Windows")
+_sysnative = os.path.join(_sysroot, "Sysnative")
 _POWERSHELL_EXE = os.path.join(
-    os.environ.get("SystemRoot", r"C:\Windows"),
-    r"System32\WindowsPowerShell\v1.0\powershell.exe",
+    _sysnative if os.path.isdir(_sysnative) else os.path.join(_sysroot, "System32"),
+    r"WindowsPowerShell\v1.0\powershell.exe",
 )
 
 # Prefix prepended to every PowerShell script so AD cmdlets are always available.

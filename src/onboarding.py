@@ -76,14 +76,15 @@ def _set_calendar_permissions_with_retry(users: list[OnboardingUser]) -> None:
         )
 
 
-def _process_user(user: OnboardingUser, *, exists: bool) -> EmailRow | None:
+def _process_user(user: OnboardingUser, *, exists: bool) -> tuple[EmailRow | None, bool]:
     """Process a single user: provision or reconcile on-premise, collect email data.
 
     If *exists* is True the mailbox creation is skipped and only AD attributes,
     groups and the profile folder are (re-)applied.
 
-    Returns an EmailRow for the summary email, or None if the user was skipped.
+    Returns a tuple of (EmailRow for the summary email or None, provisioned_ok bool).
     """
+    provisioned_ok = False
     job_title = resolve_job_title(user)
     ou = resolve_ou(user)
     groups = resolve_groups(user, ou)
@@ -106,6 +107,7 @@ def _process_user(user: OnboardingUser, *, exists: bool) -> EmailRow | None:
                     ou=ou,
                     groups=groups,
                 )
+            provisioned_ok = True
             if failed_groups:
                 logger.warning(
                     "User %s: failed to add to groups: %s",
@@ -144,7 +146,7 @@ def _process_user(user: OnboardingUser, *, exists: bool) -> EmailRow | None:
         berufstraeger=user.berufstraeger,
         stundensatz=user.stundensatz,
         fte=user.umf_besetz,
-    )
+    ), provisioned_ok
 
 
 def run_onboarding() -> None:
@@ -189,10 +191,10 @@ def run_onboarding() -> None:
                 logger.info("User %s already exists in AD — skipping (set RECONCILE_EXISTING=true to update)", user.abbreviation)
                 continue
 
-        row = _process_user(user, exists=exists)
+        row, provisioned_ok = _process_user(user, exists=exists)
         if row:
             email_rows.append(row)
-            if not exists and not user.is_reinigungskraft:
+            if not exists and not user.is_reinigungskraft and provisioned_ok:
                 newly_provisioned.append(user)
 
     # Step 3: Set calendar permissions for newly provisioned users
