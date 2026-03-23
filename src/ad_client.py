@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import subprocess
+import tempfile
 
 from src.config import settings
 from src.models import OnboardingUser
@@ -24,6 +25,20 @@ _POWERSHELL_EXE = os.path.join(
     _sysnative if os.path.isdir(_sysnative) else os.path.join(_sysroot, "System32"),
     r"WindowsPowerShell\v1.0\powershell.exe",
 )
+
+# Build a subprocess environment with a guaranteed-existing TEMP directory.
+# When Task Scheduler runs without loading the user profile, TEMP/TMP may
+# point to a non-existent profile folder, which crashes the Exchange snap-in's
+# NewUserBase type initializer.
+def _ps_env() -> dict[str, str]:
+    env = os.environ.copy()
+    temp_dir = env.get("TEMP") or env.get("TMP") or tempfile.gettempdir()
+    if not os.path.isdir(temp_dir):
+        temp_dir = os.path.join(_sysroot, "Temp")
+        os.makedirs(temp_dir, exist_ok=True)
+    env["TEMP"] = temp_dir
+    env["TMP"] = temp_dir
+    return env
 
 # Prefix prepended to every PowerShell script so AD cmdlets are always available.
 _PS_PREAMBLE = "Import-Module ActiveDirectory -ErrorAction SilentlyContinue\n"
@@ -101,6 +116,7 @@ def user_exists_in_ad(abbreviation: str) -> bool:
         capture_output=True,
         text=True,
         timeout=30,
+        env=_ps_env(),
     )
     output = result.stdout.strip()
     return output == "FOUND"
@@ -125,6 +141,7 @@ def _run_ps(script: str, *, description: str) -> subprocess.CompletedProcess[str
         capture_output=True,
         text=True,
         timeout=120,
+        env=_ps_env(),
     )
 
     if result.returncode != 0:
