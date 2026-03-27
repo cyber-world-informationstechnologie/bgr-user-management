@@ -524,28 +524,34 @@ def remove_user_from_all_groups(abbreviation: str) -> None:
     """Remove user from all AD groups except Domain Users.
 
     Domain Users is a special group that all AD users belong to and cannot be removed.
+    Reads group membership via the MemberOf attribute (more reliable than
+    Get-ADPrincipalGroupMembership, which can silently return nothing when a DC
+    is unreachable).
     """
     script = f"""
-$user = Get-ADUser -Filter {{ SamAccountName -eq '{_escape(abbreviation)}' }}
+$user = Get-ADUser -Filter {{ SamAccountName -eq '{_escape(abbreviation)}' }} -Properties MemberOf
 if (-not $user) {{
     Write-Error 'User {_escape(abbreviation)} not found in AD'
     exit 1
 }}
 
-# Get all groups the user is a member of
-$groups = Get-ADPrincipalGroupMembership -Identity $user | Where-Object {{ $_.Name -ne 'Domain Users' }}
+# MemberOf contains the DNs of all explicit group memberships.
+# It does NOT include the primary group (Domain Users), so no filtering needed.
+$memberOfDNs = @($user.MemberOf)
 
-if ($groups) {{
-    foreach ($group in $groups) {{
+if ($memberOfDNs.Count -gt 0) {{
+    foreach ($dn in $memberOfDNs) {{
         try {{
-            Remove-ADGroupMember -Identity $group.DistinguishedName -Members $user -Confirm:$false
+            $group = Get-ADGroup -Identity $dn -ErrorAction Stop
+            Remove-ADGroupMember -Identity $dn -Members $user -Confirm:$false -ErrorAction Stop
             Write-Output "Removed from group: $($group.Name)"
         }} catch {{
-            Write-Warning "Failed to remove from group $($group.Name): $_"
+            Write-Warning "Failed to remove from group $dn : $_"
         }}
     }}
+    Write-Output "Group removal completed for: {_escape(abbreviation)}"
 }} else {{
-    Write-Output 'User is only a member of Domain Users (no removal needed)'
+    Write-Output 'No explicit group memberships found for {_escape(abbreviation)} (only Domain Users primary group)'
 }}
 """
     _run_ps(script, description=f"Remove-ADGroupMember all groups {abbreviation}")
@@ -647,29 +653,55 @@ Write-Output "Auto-reply configured for: {_escape(email)}"
 
 
 def remove_from_distribution_groups(email: str) -> None:
-    """Remove a user from all distribution groups and mail-enabled security groups.
+    """Remove a user from all distribution groups, mail-enabled security groups,
+    and Microsoft 365 Groups (Unified Groups / Teams).
 
     This prevents emails to those groups from being delivered to the former user's mailbox.
     Connects to Exchange Online via certificate-based auth.
     """
     script = f"""
 {_exo_preamble()}
+
+# --- Classic distribution groups and mail-enabled security groups ---
 $allGroups = Get-DistributionGroup -ResultSize Unlimited
 
 foreach ($group in $allGroups) {{
     try {{
-        $members = Get-DistributionGroupMember -Identity $group.DistinguishedName -ResultSize Unlimited
+        $members = Get-DistributionGroupMember -Identity $group.DistinguishedName -ResultSize Unlimited -ErrorAction Stop
         if ($members | Where-Object {{ $_.PrimarySmtpAddress -eq '{_escape(email)}' }}) {{
-            Remove-DistributionGroupMember -Identity $group.DistinguishedName -Member '{_escape(email)}' -Confirm:$false -ErrorAction SilentlyContinue
-            Write-Output "Removed from distribution group: $($group.Name)"
+            try {{
+                Remove-DistributionGroupMember -Identity $group.DistinguishedName -Member '{_escape(email)}' -Confirm:$false -ErrorAction Stop
+                Write-Output "Removed from distribution group: $($group.DisplayName)"
+            }} catch {{
+                Write-Warning "Failed to remove from distribution group $($group.DisplayName): $_"
+            }}
         }}
     }} catch {{
-        Write-Warning "Failed to check/remove from group $($group.Name): $_"
+        Write-Warning "Failed to check members of distribution group $($group.DisplayName): $_"
     }}
 }}
 
-Write-Output "Distribution group removal completed for: {_escape(email)}"
+# --- Microsoft 365 Groups (Unified Groups / Teams) ---
+$unifiedGroups = Get-UnifiedGroup -ResultSize Unlimited
+
+foreach ($group in $unifiedGroups) {{
+    try {{
+        $members = Get-UnifiedGroupLinks -Identity $group.Identity -LinkType Members -ResultSize Unlimited -ErrorAction Stop
+        if ($members | Where-Object {{ $_.PrimarySmtpAddress -eq '{_escape(email)}' }}) {{
+            try {{
+                Remove-UnifiedGroupLinks -Identity $group.Identity -LinkType Members -Links '{_escape(email)}' -Confirm:$false -ErrorAction Stop
+                Write-Output "Removed from M365 group: $($group.DisplayName)"
+            }} catch {{
+                Write-Warning "Failed to remove from M365 group $($group.DisplayName): $_"
+            }}
+        }}
+    }} catch {{
+        Write-Warning "Failed to check members of M365 group $($group.DisplayName): $_"
+    }}
+}}
+
+Write-Output "Group removal completed for: {_escape(email)}"
 {_exo_cleanup()}
 """
     _run_ps(script, description=f"Remove from distribution groups {email}")
-    logger.info("Removed user %s from all distribution groups", email)
+    logger.info("Removed user %s from all distribution groups and M365 groups", email)
