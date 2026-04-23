@@ -60,6 +60,7 @@ def setup_logging(mode: str) -> None:
 
 from src.onboarding import run_onboarding  # noqa: E402
 from src.offboarding import run_offboarding  # noqa: E402
+from src.onboarding import seed_provisioned_state  # noqa: E402
 
 
 def main() -> None:
@@ -70,7 +71,7 @@ def main() -> None:
     )
     parser.add_argument(
         "mode",
-        choices=["onboarding", "offboarding"],
+        choices=["onboarding", "offboarding", "seed-state"],
         help="Choose the process to run",
     )
     parser.add_argument(
@@ -95,6 +96,8 @@ def main() -> None:
             if not success:
                 logger.error("Process completed with failures")
                 sys.exit(1)
+        elif args.mode == "seed-state":
+            seed_provisioned_state()
         logger.info("Process completed successfully")
     except Exception as e:
         logger.error("Process failed with exception: %s", e, exc_info=True)

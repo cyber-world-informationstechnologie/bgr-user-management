@@ -322,3 +322,76 @@ def run_onboarding() -> None:
         logger.info("No new users to onboard — no summary email sent")
 
     logger.info("=== Onboarding run complete ===")
+
+
+def seed_provisioned_state() -> None:
+    """Backfill the provisioned-users state file from existing AD accounts.
+
+    One-shot helper for the migration to the state-tracking feature: fetches
+    the current LOGA onboarding list and, for every user whose abbreviation
+    already exists in AD, records them in `provisioned_users.json` as
+    "provisioned by us". After running this once, future onboarding runs
+    will recognise these accounts as ours and skip the conflict notification.
+
+    Safe to run repeatedly; existing entries are simply replaced.
+    Honours DRY_RUN (no file is written when DRY_RUN=true).
+    """
+    logger.info("=== Starting state seed run ===")
+    if settings.dry_run:
+        logger.info("*** DRY RUN MODE — state file will NOT be written ***")
+
+    users = fetch_new_users()
+    if not users:
+        logger.info("No users returned from LOGA — nothing to seed.")
+        return
+
+    seeded = 0
+    skipped_no_email = 0
+    skipped_not_in_ad = 0
+
+    for user in users:
+        if not user.email:
+            logger.warning("Skipping PNR %s — no email", user.personalnummer)
+            skipped_no_email += 1
+            continue
+
+        if not user_exists_in_ad(user.abbreviation):
+            logger.info(
+                "User %s (%s) not in AD — skipping (will be provisioned normally)",
+                user.abbreviation,
+                user.email,
+            )
+            skipped_not_in_ad += 1
+            continue
+
+        if is_provisioned_by_us(abbreviation=user.abbreviation, email=user.email):
+            logger.info(
+                "User %s already recorded in state file — skipping",
+                user.abbreviation,
+            )
+            continue
+
+        logger.info(
+            "Seeding %s (%s, PNR %s) into state file",
+            user.abbreviation,
+            user.email,
+            user.personalnummer,
+        )
+        try:
+            mark_provisioned(
+                pnr=user.personalnummer,
+                abbreviation=user.abbreviation,
+                email=user.email,
+            )
+            seeded += 1
+        except Exception:
+            logger.exception(
+                "Failed to seed state for %s (%s)", user.abbreviation, user.email
+            )
+
+    logger.info(
+        "=== Seed run complete: %d seeded, %d not in AD, %d without email ===",
+        seeded,
+        skipped_not_in_ad,
+        skipped_no_email,
+    )
