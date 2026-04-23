@@ -122,6 +122,52 @@ def user_exists_in_ad(abbreviation: str) -> bool:
     return output == "FOUND"
 
 
+def find_ad_user_by_email(email: str) -> str | None:
+    """Return the SamAccountName of an AD user whose mail or proxyAddresses
+    matches *email*, or None if no such user exists.
+
+    Used to detect "email already taken" collisions before provisioning.
+    Returns None on PowerShell errors so the caller can decide to proceed
+    (a transient AD lookup failure should not silently swallow onboarding).
+    """
+    if not email:
+        return None
+
+    smtp_addr = f"smtp:{email}"
+    script = (
+        _PS_PREAMBLE
+        + (
+            f"$u = Get-ADUser -LDAPFilter "
+            f"\"(|(mail={_escape(email)})(proxyAddresses={_escape(smtp_addr)}))\" "
+            "-Properties SamAccountName | Select-Object -First 1\n"
+            "if ($u) { $u.SamAccountName } else { '' }"
+        )
+    )
+    try:
+        result = subprocess.run(
+            [_POWERSHELL_EXE, "-NonInteractive", "-EncodedCommand", _encode_command(script)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=_ps_env(),
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        logger.exception("find_ad_user_by_email(%s) failed", email)
+        return None
+
+    if result.returncode != 0:
+        logger.warning(
+            "find_ad_user_by_email(%s) returned rc=%d: %s",
+            email,
+            result.returncode,
+            _strip_clixml(result.stderr),
+        )
+        return None
+
+    sam = result.stdout.strip()
+    return sam or None
+
+
 def _run_ps(script: str, *, description: str) -> subprocess.CompletedProcess[str]:
     """Execute a PowerShell script block and return the result.
 
@@ -206,7 +252,12 @@ Write-Output "Created remote mailbox user {abrev_upper}"
     logger.info("Created remote mailbox for %s", user.email)
 
 
-def set_ad_attributes(user: OnboardingUser, *, job_title: str) -> None:
+def set_ad_attributes(
+    user: OnboardingUser,
+    *,
+    job_title: str,
+    extension_attribute5: str,
+) -> None:
     """Set AD user attributes (address, phone, title, extension attributes, manager)."""
     address = user.address
 
@@ -221,7 +272,7 @@ if (-not $userdn) {{
 # Extension attributes (use -Replace so re-runs are idempotent)
 Set-ADUser -Identity $userdn -Replace @{{"extensionattribute1"='{_escape(user.title_pre)}'}}
 Set-ADUser -Identity $userdn -Replace @{{"extensionattribute2"='{_escape(user.title_post)}'}}
-Set-ADUser -Identity $userdn -Replace @{{"extensionattribute5"='{_escape(job_title)}'}}
+Set-ADUser -Identity $userdn -Replace @{{"extensionattribute5"='{_escape(extension_attribute5)}'}}
 
 # Standard attributes
 Set-ADUser `
@@ -390,6 +441,7 @@ def provision_user(
     user: OnboardingUser,
     *,
     job_title: str,
+    extension_attribute5: str,
     ou: str,
     groups: list[str],
     ad_replication_wait: int = 10,
@@ -410,7 +462,7 @@ def provision_user(
         logger.info("Waiting %ds for AD replication before setting attributes…", ad_replication_wait)
         time.sleep(ad_replication_wait)
 
-    set_ad_attributes(user, job_title=job_title)
+    set_ad_attributes(user, job_title=job_title, extension_attribute5=extension_attribute5)
     failed_groups = add_to_groups(user, groups)
     create_profile_folder(user)
     return failed_groups
@@ -420,6 +472,7 @@ def reconcile_user(
     user: OnboardingUser,
     *,
     job_title: str,
+    extension_attribute5: str,
     ou: str,
     groups: list[str],
 ) -> list[str]:
@@ -430,7 +483,7 @@ def reconcile_user(
 
     Returns list of groups that failed to be assigned.
     """
-    set_ad_attributes(user, job_title=job_title)
+    set_ad_attributes(user, job_title=job_title, extension_attribute5=extension_attribute5)
     failed_groups = add_to_groups(user, groups)
     create_profile_folder(user)
     return failed_groups

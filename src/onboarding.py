@@ -8,15 +8,22 @@ the whitelisted Exchange connector.
 import logging
 import time
 
-from src.ad_client import provision_user, reconcile_user, set_calendar_permissions, user_exists_in_ad
+from src.ad_client import (
+    find_ad_user_by_email,
+    provision_user,
+    reconcile_user,
+    set_calendar_permissions,
+    user_exists_in_ad,
+)
 from src.config import settings
 from src.email_builder import EmailRow, build_onboarding_email
 from src.smtp_client import send_email
 from src.group_resolver import resolve_groups
-from src.job_title_resolver import resolve_job_title
+from src.job_title_resolver import resolve_extension_attribute5, resolve_job_title
 from src.loga_client import fetch_new_users
 from src.models import OnboardingUser
 from src.ou_resolver import resolve_ou
+from src.state_store import is_provisioned_by_us, mark_provisioned
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +83,52 @@ def _set_calendar_permissions_with_retry(users: list[OnboardingUser]) -> None:
         )
 
 
+def _send_conflict_email(
+    user: OnboardingUser,
+    *,
+    conflict_kind: str,
+    existing_sam: str | None,
+) -> None:
+    """Notify the operator that we cannot onboard *user* because the
+    abbreviation or email is already in use by an account we did not create.
+    """
+    detail = {
+        "abbreviation": (
+            f"Das Kürzel <strong>{user.abbreviation}</strong> ist bereits in "
+            f"Active Directory vergeben."
+        ),
+        "email": (
+            f"Die E-Mail-Adresse <strong>{user.email}</strong> wird bereits von "
+            f"einem anderen AD-Benutzer verwendet"
+            + (f" (<code>{existing_sam}</code>)" if existing_sam else "")
+            + "."
+        ),
+    }.get(conflict_kind, f"Unbekannter Konflikt ({conflict_kind}).")
+
+    html_body = (
+        f"<p>Der Benutzer <strong>{user.full_display_name}</strong> "
+        f"(PNR {user.personalnummer}, Kürzel {user.abbreviation}, {user.email}) "
+        f"konnte nicht automatisch angelegt werden.</p>"
+        f"<p>{detail}</p>"
+        f"<p>Da dieses Konto nicht von uns provisioniert wurde, wird es "
+        f"<em>nicht</em> automatisch überschrieben. Bitte manuell prüfen "
+        f"(Kürzel/E-Mail in LOGA korrigieren oder bestehendes AD-Objekt "
+        f"bereinigen).</p>"
+    )
+    try:
+        send_email(
+            subject=f"Onboarding-Konflikt: {user.abbreviation} / {user.email}",
+            html_body=html_body,
+            to_recipients=[
+                addr.strip()
+                for addr in settings.error_notification_email.split(",")
+                if addr.strip()
+            ],
+        )
+    except Exception:
+        logger.exception("Failed to send conflict notification email")
+
+
 def _process_user(user: OnboardingUser, *, exists: bool) -> tuple[EmailRow | None, bool]:
     """Process a single user: provision or reconcile on-premise, collect email data.
 
@@ -86,6 +139,7 @@ def _process_user(user: OnboardingUser, *, exists: bool) -> tuple[EmailRow | Non
     """
     provisioned_ok = False
     job_title = resolve_job_title(user)
+    extension_attribute5 = resolve_extension_attribute5(user)
     ou = resolve_ou(user)
     groups = resolve_groups(user, ou)
 
@@ -97,6 +151,7 @@ def _process_user(user: OnboardingUser, *, exists: bool) -> tuple[EmailRow | Non
                 failed_groups = reconcile_user(
                     user,
                     job_title=job_title,
+                    extension_attribute5=extension_attribute5,
                     ou=ou,
                     groups=groups,
                 )
@@ -104,10 +159,22 @@ def _process_user(user: OnboardingUser, *, exists: bool) -> tuple[EmailRow | Non
                 failed_groups = provision_user(
                     user,
                     job_title=job_title,
+                    extension_attribute5=extension_attribute5,
                     ou=ou,
                     groups=groups,
                 )
             provisioned_ok = True
+            # Record so we recognise this account as ours on subsequent runs
+            try:
+                mark_provisioned(
+                    pnr=user.personalnummer,
+                    abbreviation=user.abbreviation,
+                    email=user.email,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to record provisioning state for %s", user.abbreviation
+                )
             if failed_groups:
                 logger.warning(
                     "User %s: failed to add to groups: %s",
@@ -182,13 +249,48 @@ def run_onboarding() -> None:
             logger.warning("Skipping user with PNR %s — no email", user.pnr)
             continue
 
-        # Check if user already exists in AD
+        # Check if user already exists in AD (by abbreviation / SamAccountName)
         exists = user_exists_in_ad(user.abbreviation)
+
         if exists:
-            if settings.reconcile_existing:
-                logger.info("User %s already exists in AD — reconcile flag is set, will update attributes", user.abbreviation)
+            if is_provisioned_by_us(abbreviation=user.abbreviation, email=user.email):
+                if settings.reconcile_existing:
+                    logger.info(
+                        "User %s already exists in AD (provisioned by us) — "
+                        "reconcile flag is set, will update attributes",
+                        user.abbreviation,
+                    )
+                else:
+                    logger.info(
+                        "User %s already exists in AD (provisioned by us) — "
+                        "skipping (set RECONCILE_EXISTING=true to update)",
+                        user.abbreviation,
+                    )
+                    continue
             else:
-                logger.info("User %s already exists in AD — skipping (set RECONCILE_EXISTING=true to update)", user.abbreviation)
+                logger.warning(
+                    "Abbreviation %s already taken in AD by an account we did not "
+                    "provision — sending conflict notification and skipping",
+                    user.abbreviation,
+                )
+                _send_conflict_email(user, conflict_kind="abbreviation", existing_sam=user.abbreviation)
+                continue
+        else:
+            # Abbreviation is free — also make sure the email isn't already used
+            # by another AD user (e.g. mismatched LOGA data).
+            existing_sam = find_ad_user_by_email(user.email)
+            if existing_sam and not is_provisioned_by_us(
+                abbreviation=user.abbreviation, email=user.email
+            ):
+                logger.warning(
+                    "Email %s already in use by AD user %s — sending conflict "
+                    "notification and skipping",
+                    user.email,
+                    existing_sam,
+                )
+                _send_conflict_email(
+                    user, conflict_kind="email", existing_sam=existing_sam
+                )
                 continue
 
         row, provisioned_ok = _process_user(user, exists=exists)

@@ -69,3 +69,25 @@ def resolve_job_title(user: OnboardingUser) -> str:
 def resolve_job_title_en(user: OnboardingUser) -> str:
     """Resolve the English job title for the given user."""
     return _ENGLISH_TITLES.get(user.position, "Unknown")
+
+
+# Positions whose extensionAttribute5 should be the gender-neutral "Assistenz"
+# instead of the gendered job title (Assistent/Assistentin).
+_EXT5_OVERRIDES: dict[str, str] = {
+    "Assistent*in": "Assistenz",
+    "Backoffice Assistent*in": "Backoffice Assistenz",
+    "Assistent*in - Reisestelle": "Assistenz - Reisestelle",
+    "MP Assistent*in": "MP Assistenz",
+}
+
+
+def resolve_extension_attribute5(user: OnboardingUser) -> str:
+    """Resolve the value used for AD extensionAttribute5.
+
+    For Sekretariats-/Assistenz-Positionen wird die gender-neutrale Form
+    "Assistenz" verwendet, sonst der reguläre (gegenderte) Job Title.
+    """
+    override = _EXT5_OVERRIDES.get(user.position)
+    if override is not None:
+        return override
+    return resolve_job_title(user)

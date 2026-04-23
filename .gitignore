@@ -198,6 +198,9 @@ cython_debug/
 # Application logs (do not commit — contains sensitive process information)
 logs/
 
+# Local provisioning state (tracks accounts we created — do not commit)
+provisioned_users.json
+
 # Cursor
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
 #  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data

@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     calendar_retry_attempts: int = 6  # Number of retry attempts for calendar permissions
     calendar_retry_interval: int = 300  # Seconds between retries
 
+    # ========== State / Bookkeeping ==========
+    # JSON file recording the abbreviation/email of users we have provisioned
+    # ourselves. Used to suppress "account already taken" notifications for
+    # accounts we created in a previous run.
+    state_file_path: str = "provisioned_users.json"
+
     # ========== Behavior Flags ==========
     dry_run: bool = True
     reconcile_existing: bool = False  # Re-apply AD attributes for users that already exist
