@@ -118,7 +118,7 @@ def user_exists_in_ad(abbreviation: str) -> bool:
         timeout=30,
         env=_ps_env(),
     )
-    output = result.stdout.strip()
+    output = (result.stdout or "").strip()
     return output == "FOUND"
 
 
@@ -164,7 +164,7 @@ def find_ad_user_by_email(email: str) -> str | None:
         )
         return None
 
-    sam = result.stdout.strip()
+    sam = (result.stdout or "").strip()
     return sam or None
 
 
@@ -201,7 +201,7 @@ def _run_ps(script: str, *, description: str) -> subprocess.CompletedProcess[str
         )
         raise RuntimeError(f"PowerShell [{description}] failed: {clean_stderr}")
 
-    logger.debug("PowerShell [%s] output: %s", description, result.stdout.strip())
+    logger.debug("PowerShell [%s] output: %s", description, (result.stdout or "").strip())
     return result
 
 
