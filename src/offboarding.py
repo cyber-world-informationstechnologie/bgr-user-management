@@ -8,7 +8,7 @@ Offboarding runs on the day AFTER the exit_date (last work day):
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 from src.ad_client import (
@@ -248,16 +248,21 @@ def run_offboarding(resend: bool = False) -> bool:
     # Phase 1: Send notification email for any new users found
     _send_notification_on_new_users(users, resend)
 
-    # Phase 2: Execute offboarding operations for users exiting yesterday
-    yesterday = (datetime.now() - timedelta(days=1)).strftime("%d.%m.%Y")
-    offboarding_users = [u for u in users if u.exit_date == yesterday]
-    
+    # Phase 2: Execute offboarding operations for users whose exit_date is in the past.
+    # This includes the day after their last work day and all subsequent days,
+    # so that offboarding is retried if the user still exists in the system.
+    today = datetime.now().date()
+    offboarding_users = [
+        u for u in users
+        if u.exit_date and datetime.strptime(u.exit_date, "%d.%m.%Y").date() < today
+    ]
+
     failed_count = 0
     if offboarding_users:
-        logger.info("Phase 2: Executing offboarding for %d users with exit_date = %s", len(offboarding_users), yesterday)
+        logger.info("Phase 2: Executing offboarding for %d users with exit_date before %s", len(offboarding_users), today.strftime("%d.%m.%Y"))
         failed_count = _execute_offboarding_operations(offboarding_users, resend)
     else:
-        logger.info("Phase 2: No users to offboard today (looking for exit_date=%s)", yesterday)
+        logger.info("Phase 2: No users to offboard today (no exit_date before %s)", today.strftime("%d.%m.%Y"))
 
     if failed_count:
         logger.error("Offboarding process completed with %d failure(s)", failed_count)
