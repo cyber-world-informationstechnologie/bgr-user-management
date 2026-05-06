@@ -758,3 +758,27 @@ Write-Output "Group removal completed for: {_escape(email)}"
 """
     _run_ps(script, description=f"Remove from distribution groups {email}")
     logger.info("Removed user %s from all distribution groups and M365 groups", email)
+
+
+def hide_from_gal(email: str) -> None:
+    """Hide a user from the Global Address List (GAL).
+
+    Sets HiddenFromAddressListsEnabled to $true so the user no longer appears
+    in the organization's address book.
+    Connects to Exchange Online via certificate-based auth.
+    """
+    script = f"""
+{_exo_preamble()}
+$mailbox = Get-Mailbox -Identity '{_escape(email)}' -ErrorAction SilentlyContinue
+if (-not $mailbox) {{
+    Write-Warning 'Mailbox {_escape(email)} not found'
+    {_exo_cleanup()}
+    exit 1
+}}
+
+Set-Mailbox -Identity '{_escape(email)}' -HiddenFromAddressListsEnabled $true
+Write-Output "Hidden from GAL: {_escape(email)}"
+{_exo_cleanup()}
+"""
+    _run_ps(script, description=f"Hide from GAL {email}")
+    logger.info("Hidden %s from Global Address List", email)

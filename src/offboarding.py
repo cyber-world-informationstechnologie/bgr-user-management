@@ -13,6 +13,7 @@ from pathlib import Path
 
 from src.ad_client import (
     disable_user_account,
+    hide_from_gal,
     move_user_to_ou,
     remove_user_from_all_groups,
     setup_mailbox_forwarding,
@@ -172,6 +173,9 @@ def _process_user(user: OffboardingUser) -> OffboardingEmailRow | None:
         
         # Remove from distribution groups
         remove_from_distribution_groups(user.email)
+
+        # Hide from Global Address List
+        hide_from_gal(user.email)
 
         # Active Directory cleanup
         disable_user_account(user.abbreviation)
